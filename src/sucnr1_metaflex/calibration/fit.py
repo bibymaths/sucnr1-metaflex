@@ -12,6 +12,7 @@ in linear space.
 from __future__ import annotations
 
 import json
+import time
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
@@ -21,7 +22,8 @@ from loguru import logger
 from scipy.optimize import Bounds, minimize
 
 from .parameters import load_fit_config
-from .objective import compute_residuals
+from .numba_kernels import NUMBA_AVAILABLE, loss_name_to_code, robust_scalar_loss
+from .objective import compute_residuals, prepare_residual_context
 from .protocols import validate_protocol_parameters
 
 
@@ -184,6 +186,8 @@ def _make_objective(
     observables: Dict[str, str],
     loss_name: str,
     f_scale: float,
+    residual_context=None,
+    use_numba: bool = False,
 ):
     """Build scalar objective function over log10 parameters."""
 
@@ -204,12 +208,22 @@ def _make_objective(
                 model_path,
                 assay_weights,
                 observables,
+                context=residual_context,
+                use_numba=use_numba,
             )
-            value = _robust_scalar_loss(
-                residuals,
-                loss_name=loss_name,
-                f_scale=f_scale,
-            )
+            if use_numba and NUMBA_AVAILABLE:
+                value = robust_scalar_loss(
+                    residuals,
+                    loss_name_to_code(loss_name),
+                    f_scale,
+                    use_numba=True,
+                )
+            else:
+                value = _robust_scalar_loss(
+                    residuals,
+                    loss_name=loss_name,
+                    f_scale=f_scale,
+                )
         except Exception as exc:
             logger.debug(f"Objective evaluation failed: {exc}")
             return DEFAULT_INVALID_LOSS
@@ -408,6 +422,31 @@ def run_fit(
     scalar_loss = str(optimiser_cfg.get("loss", "soft_l1"))
     f_scale = _safe_float(optimiser_cfg.get("f_scale"), 1.0)
 
+    performance_cfg = dict(fit_cfg.performance or {})
+    use_numba_requested = bool(performance_cfg.get("use_numba", True))
+    use_numba = bool(use_numba_requested and NUMBA_AVAILABLE)
+    residual_context = prepare_residual_context(
+        data,
+        assay_weights,
+        observables,
+        use_numba=use_numba,
+    )
+
+    objective_python = _make_objective(
+        param_names=param_names,
+        data=data,
+        model_path=body_model_path,
+        assay_weights=assay_weights,
+        observables=observables,
+        loss_name=scalar_loss,
+        f_scale=f_scale,
+        residual_context=residual_context,
+        use_numba=False,
+    )
+    t0 = time.perf_counter()
+    objective_before_warmup = float(objective_python(guess_log))
+    objective_time_before_warmup_s = time.perf_counter() - t0
+
     objective = _make_objective(
         param_names=param_names,
         data=data,
@@ -416,6 +455,28 @@ def run_fit(
         observables=observables,
         loss_name=scalar_loss,
         f_scale=f_scale,
+        residual_context=residual_context,
+        use_numba=use_numba,
+    )
+
+    warmup_start = time.perf_counter()
+    warmup_loss = float(objective(guess_log))
+    warmup_time_s = time.perf_counter() - warmup_start
+    timed_start = time.perf_counter()
+    objective_after_warmup = float(objective(guess_log))
+    objective_time_after_warmup_s = time.perf_counter() - timed_start
+    gradient_evaluations = len(param_names) + 1
+    estimated_fd_gradient_time_s = objective_time_after_warmup_s * gradient_evaluations
+
+    logger.info(
+        "Calibration performance: "
+        f"numba_requested={use_numba_requested}; numba_enabled={use_numba}; "
+        f"objective_before_warmup={objective_time_before_warmup_s:.6g}s; "
+        f"warmup={warmup_time_s:.6g}s; "
+        f"objective_after_warmup={objective_time_after_warmup_s:.6g}s; "
+        f"simulations_per_evaluation={residual_context.simulations_per_evaluation}; "
+        f"n_parameters={len(param_names)}; "
+        f"estimated_fd_gradient_time={estimated_fd_gradient_time_s:.6g}s"
     )
 
     rng = np.random.default_rng(base_seed)
@@ -530,6 +591,20 @@ def run_fit(
         "n_requested_starts": requested_starts,
         "loss": scalar_loss,
         "f_scale": float(f_scale),
+        "performance": {
+            "use_numba_requested": use_numba_requested,
+            "numba_available": NUMBA_AVAILABLE,
+            "numba_enabled": use_numba,
+            "objective_value_before_warmup": objective_before_warmup,
+            "objective_time_before_warmup_s": objective_time_before_warmup_s,
+            "warmup_loss": warmup_loss,
+            "warmup_time_s": warmup_time_s,
+            "objective_value_after_warmup": objective_after_warmup,
+            "objective_time_after_warmup_s": objective_time_after_warmup_s,
+            "simulations_per_objective_evaluation": residual_context.simulations_per_evaluation,
+            "n_fitted_parameters": len(param_names),
+            "estimated_finite_difference_gradient_time_s": estimated_fd_gradient_time_s,
+        },
         "optimiser": optimiser_cfg,
     }
 

@@ -60,3 +60,6 @@ observables:
   PTT_female: G_mgdl
   fasting_glucose: G_mgdl
   fasting_ketone: Ketone_plasma
+
+performance:
+  use_numba: true
