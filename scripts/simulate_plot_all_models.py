@@ -165,7 +165,7 @@ def save_wide_plot(df: pd.DataFrame, model_name: str, out_dir: Path) -> Path:
     fig.tight_layout()
 
     path = out_dir / f"{model_name}__overview.png"
-    fig.savefig(path, dpi=200)
+    fig.savefig(path, dpi=300)
     plt.close(fig)
     return path
 
@@ -192,7 +192,7 @@ def save_single_series_plots(df: pd.DataFrame, model_name: str, out_dir: Path) -
             .replace("__", "_")
         )
         path = out_dir / f"{model_name}__{safe_col}.png"
-        fig.savefig(path, dpi=200)
+        fig.savefig(path, dpi=300)
         plt.close(fig)
 
         written.append(path)

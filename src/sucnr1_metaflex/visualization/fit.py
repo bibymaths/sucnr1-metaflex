@@ -14,6 +14,9 @@ from sucnr1_metaflex.calibration.parameters import load_fit_config
 from sucnr1_metaflex.simulation.roadrunner_engine import load_model
 from sucnr1_metaflex.calibration.protocols import detect_condition_column, evaluate_shape, load_protocol_config, resolve_condition_factors, resolve_initial_conditions, resolve_protocol
 from sucnr1_metaflex.calibration.objective import _simulate_fitted_to_times as _simulate_protocol_to_times
+from sucnr1_metaflex.visualization.goodness_of_fit import (
+    plot_observed_vs_predicted_by_species,
+)
 
 from .io import load_parameter_file, numeric_time_value_frame
 from .style import apply_mpl_style, ensure_dir, safe_slug, save_figure
@@ -254,6 +257,12 @@ def plot_model_fit(
     residual_csv = out / "fit_observed_predicted_residuals.csv"
     table.to_csv(residual_csv, index=False)
 
+    plot_observed_vs_predicted_by_species(
+        residuals=table,
+        out_dir=out_dir / "model_fit" / "goodness_of_fit",
+        species_col="observable",
+    )
+    
     written: list[Path] = []
 
     for assay, assay_df in table.groupby("assay", dropna=False):

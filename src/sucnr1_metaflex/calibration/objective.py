@@ -156,7 +156,11 @@ def _simulate_fitted_to_times(
     all_symbols, _ = _available_model_symbols(model_path)
     for name, value in (condition_factors or {}).items():
         if name not in global_params:
-            raise KeyError(f"Condition factor {name} not present in model")
+            # logger.debug(
+            #     f"Skipping condition factor {name!r}; not present in model {model_path}"
+            # )
+            continue
+
         rr[name] = float(value)  # type: ignore[index]
     for name, value in (initial_conditions or {}).items():
         if name not in all_symbols:

@@ -11,6 +11,17 @@ in linear space.
 
 from __future__ import annotations
 
+import os
+
+os.environ.setdefault("OMP_NUM_THREADS", "1")
+os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
+os.environ.setdefault("MKL_NUM_THREADS", "1")
+os.environ.setdefault("VECLIB_MAXIMUM_THREADS", "1")
+os.environ.setdefault("NUMEXPR_NUM_THREADS", "1")
+
+from concurrent.futures import ProcessPoolExecutor, as_completed
+from multiprocessing import get_context
+
 import json
 import time
 from pathlib import Path
@@ -347,6 +358,71 @@ def _run_one_start(
         optimiser_cfg=optimiser_cfg,
     )
 
+def _run_one_start_worker(payload: Dict[str, Any]) -> Tuple[int, np.ndarray, float, Dict[str, Any]]:
+    """Run one multistart fit in an isolated one-core worker process."""
+    os.environ.setdefault("OMP_NUM_THREADS", "1")
+    os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
+    os.environ.setdefault("MKL_NUM_THREADS", "1")
+    os.environ.setdefault("VECLIB_MAXIMUM_THREADS", "1")
+    os.environ.setdefault("NUMEXPR_NUM_THREADS", "1")
+
+    start_idx = int(payload["start_idx"])
+    data_dir = payload["data_dir"]
+    model_path = payload["model_path"]
+    fit_config_path = payload["fit_config_path"]
+    x0 = np.asarray(payload["x0"], dtype=float)
+    bounds_log = np.asarray(payload["bounds_log"], dtype=float)
+
+    fit_cfg = load_fit_config(fit_config_path)
+
+    data = _load_fit_dataset(data_dir, fit_cfg.dataset)
+    data = _filter_assays(data, fit_cfg.include_assays, fit_cfg.exclude_assays)
+
+    param_defs = fit_cfg.parameters
+    assay_weights = fit_cfg.weights or {}
+    observables = fit_cfg.observables or {}
+    param_names = list(param_defs.keys())
+
+    validate_protocol_parameters(
+        data["assay"].astype(str).unique(),
+        param_defs.keys(),
+    )
+
+    optimiser_cfg = dict(fit_cfg.optimiser or {})
+    scalar_loss = str(optimiser_cfg.get("loss", "soft_l1"))
+    f_scale = _safe_float(optimiser_cfg.get("f_scale"), 1.0)
+
+    performance_cfg = dict(fit_cfg.performance or {})
+    use_numba_requested = bool(performance_cfg.get("use_numba", True))
+    use_numba = bool(use_numba_requested and NUMBA_AVAILABLE)
+
+    residual_context = prepare_residual_context(
+        data,
+        assay_weights,
+        observables,
+        use_numba=use_numba,
+    )
+
+    objective = _make_objective(
+        param_names=param_names,
+        data=data,
+        model_path=model_path,
+        assay_weights=assay_weights,
+        observables=observables,
+        loss_name=scalar_loss,
+        f_scale=f_scale,
+        residual_context=residual_context,
+        use_numba=use_numba,
+    )
+
+    x_opt, final_loss, meta = _run_one_start(
+        objective=objective,
+        x0=x0,
+        bounds_log=bounds_log,
+        optimiser_cfg=optimiser_cfg,
+    )
+
+    return start_idx, x_opt, float(final_loss), meta
 
 def run_fit(
     data_dir: str,
@@ -484,6 +560,8 @@ def run_fit(
 
     results: List[Tuple[int, np.ndarray, float, Dict[str, Any]]] = []
 
+    start_payloads: list[Dict[str, Any]] = []
+
     for start_idx in range(requested_starts):
         if start_idx == 0:
             x0 = guess_log.copy()
@@ -492,33 +570,86 @@ def run_fit(
             highs = bounds_log[:, 1]
             x0 = rng.uniform(lows, highs)
 
+        start_payloads.append(
+            {
+                "start_idx": int(start_idx),
+                "data_dir": str(data_dir),
+                "model_path": str(body_model_path),
+                "fit_config_path": str(fit_config_path),
+                "x0": np.asarray(x0, dtype=float),
+                "bounds_log": np.asarray(bounds_log, dtype=float),
+            }
+        )
+
+    if requested_starts <= 1:
+        # Keep single-start execution local to avoid multiprocessing overhead.
+        payload = start_payloads[0]
         try:
-            x_opt, final_loss, meta = _run_one_start(
-                objective=objective,
-                x0=x0,
-                bounds_log=bounds_log,
-                optimiser_cfg=optimiser_cfg,
-            )
+            start_idx, x_opt, final_loss, meta = _run_one_start_worker(payload)
+            if np.isfinite(final_loss) and final_loss < PENALTY_LOSS_THRESHOLD:
+                results.append((start_idx, x_opt, float(final_loss), meta))
+                logger.info(
+                    f"Run {start_idx}: loss={final_loss:.6g}; "
+                    f"optimizer={meta.get('optimizer')}; "
+                    f"success={meta.get('success')}; "
+                    f"nfev={meta.get('nfev')}; "
+                    f"nit={meta.get('nit')}"
+                )
+            else:
+                logger.error(
+                    f"Run {start_idx}: invalid objective; loss={final_loss:.3e}. "
+                    "Check model/config observable compatibility or unstable simulation."
+                )
         except Exception as exc:
-            logger.exception(f"Optimization failed on start {start_idx}: {exc}")
-            continue
-
-        if not np.isfinite(final_loss) or final_loss >= PENALTY_LOSS_THRESHOLD:
-            logger.error(
-                f"Run {start_idx}: invalid objective; loss={final_loss:.3e}. "
-                "Check model/config observable compatibility or unstable simulation."
+            logger.exception(
+                f"Optimization failed on start {payload['start_idx']}: {exc}"
             )
-            continue
 
-        results.append((start_idx, x_opt, float(final_loss), meta))
+    else:
+        max_workers = min(requested_starts, os.cpu_count() or requested_starts)
 
         logger.info(
-            f"Run {start_idx}: loss={final_loss:.6g}; "
-            f"optimizer={meta.get('optimizer')}; "
-            f"success={meta.get('success')}; "
-            f"nfev={meta.get('nfev')}; "
-            f"nit={meta.get('nit')}"
+            f"Running {requested_starts} multistart fits in parallel "
+            f"with {max_workers} one-core worker processes."
         )
+
+        # spawn is safer than fork with RoadRunner/libSBML/SciPy state.
+        mp_context = get_context("spawn")
+
+        with ProcessPoolExecutor(
+            max_workers=max_workers,
+            mp_context=mp_context,
+        ) as pool:
+            future_to_start = {
+                pool.submit(_run_one_start_worker, payload): payload["start_idx"]
+                for payload in start_payloads
+            }
+
+            for future in as_completed(future_to_start):
+                start_idx = int(future_to_start[future])
+
+                try:
+                    run_idx, x_opt, final_loss, meta = future.result()
+                except Exception as exc:
+                    logger.exception(f"Optimization failed on start {start_idx}: {exc}")
+                    continue
+
+                if not np.isfinite(final_loss) or final_loss >= PENALTY_LOSS_THRESHOLD:
+                    logger.error(
+                        f"Run {run_idx}: invalid objective; loss={final_loss:.3e}. "
+                        "Check model/config observable compatibility or unstable simulation."
+                    )
+                    continue
+
+                results.append((run_idx, x_opt, float(final_loss), meta))
+
+                logger.info(
+                    f"Run {run_idx}: loss={final_loss:.6g}; "
+                    f"optimizer={meta.get('optimizer')}; "
+                    f"success={meta.get('success')}; "
+                    f"nfev={meta.get('nfev')}; "
+                    f"nit={meta.get('nit')}"
+                )
 
     if not results:
         raise RuntimeError(
