@@ -1,0 +1,341 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<sbml xmlns="http://www.sbml.org/sbml/level3/version2/core" level="3" version="2">
+  <model id="body" substanceUnits="millimole" timeUnits="hour" extentUnits="millimole">
+    <listOfUnitDefinitions>
+      <unitDefinition id="millimole">
+        <listOfUnits>
+          <unit kind="mole" exponent="1" scale="-3" multiplier="1"/>
+        </listOfUnits>
+      </unitDefinition>
+      <unitDefinition id="hour">
+        <listOfUnits>
+          <unit kind="second" exponent="1" scale="0" multiplier="3600"/>
+        </listOfUnits>
+      </unitDefinition>
+      <unitDefinition id="per_hour">
+        <listOfUnits>
+          <unit kind="second" exponent="-1" scale="0" multiplier="3600"/>
+        </listOfUnits>
+      </unitDefinition>
+      <unitDefinition id="millimole_per_litre">
+        <listOfUnits>
+          <unit kind="mole" exponent="1" scale="-3" multiplier="1"/>
+          <unit kind="litre" exponent="-1" scale="0" multiplier="1"/>
+        </listOfUnits>
+      </unitDefinition>
+      <unitDefinition id="millimole_per_litre_per_hour">
+        <listOfUnits>
+          <unit kind="mole" exponent="1" scale="-3" multiplier="1"/>
+          <unit kind="litre" exponent="-1" scale="0" multiplier="1"/>
+          <unit kind="second" exponent="-1" scale="0" multiplier="3600"/>
+        </listOfUnits>
+      </unitDefinition>
+    </listOfUnitDefinitions>
+    <listOfCompartments>
+      <compartment id="plasma" size="1" units="litre" constant="true"/>
+    </listOfCompartments>
+    <listOfSpecies>
+      <species id="G_plasma" compartment="plasma" initialConcentration="5" substanceUnits="millimole" hasOnlySubstanceUnits="false" boundaryCondition="false" constant="false"/>
+      <species id="I_eff" compartment="plasma" initialConcentration="0" substanceUnits="millimole" hasOnlySubstanceUnits="false" boundaryCondition="false" constant="false"/>
+      <species id="G_abs" compartment="plasma" initialConcentration="0" substanceUnits="millimole" hasOnlySubstanceUnits="false" boundaryCondition="false" constant="false"/>
+      <species id="Pyr_abs" compartment="plasma" initialConcentration="0" substanceUnits="millimole" hasOnlySubstanceUnits="false" boundaryCondition="false" constant="false"/>
+      <species id="Pyr_plasma" compartment="plasma" initialConcentration="0" substanceUnits="millimole" hasOnlySubstanceUnits="false" boundaryCondition="false" constant="false"/>
+      <species id="AA_plasma" compartment="plasma" initialConcentration="0" substanceUnits="millimole" hasOnlySubstanceUnits="false" boundaryCondition="false" constant="false"/>
+      <species id="Ketone_plasma" compartment="plasma" initialConcentration="0" substanceUnits="millimole" hasOnlySubstanceUnits="false" boundaryCondition="false" constant="false"/>
+      <species id="Succ_plasma" compartment="plasma" initialConcentration="0" substanceUnits="millimole" hasOnlySubstanceUnits="false" boundaryCondition="false" constant="false"/>
+    </listOfSpecies>
+    <listOfParameters>
+      <parameter id="ptt_hgp_factor" value="1" units="dimensionless" constant="false"/>
+      <parameter id="glucose_mgdl_scale" value="18.0182" units="dimensionless" constant="false"/>
+      <parameter id="I_eff_ref" value="1" units="millimole_per_litre" constant="false"/>
+      <parameter id="k_export_glucose" value="0.02" units="per_hour" constant="false"/>
+      <parameter id="k_hgp_base" value="0.35" units="millimole_per_litre_per_hour" constant="false"/>
+      <parameter id="V_hgp_pyr" value="0.05" units="millimole_per_litre_per_hour" constant="false"/>
+      <parameter id="K_pyr_hgp" value="0.5" units="millimole_per_litre" constant="false"/>
+      <parameter id="V_hgp_aa" value="0.02" units="millimole_per_litre_per_hour" constant="false"/>
+      <parameter id="K_aa_hgp" value="1" units="millimole_per_litre" constant="false"/>
+      <parameter id="k_clear_base" value="0.07" units="per_hour" constant="false"/>
+      <parameter id="k_clear_ins" value="0.2" units="per_hour" constant="false"/>
+      <parameter id="k_I_decay" value="2" units="per_hour" constant="false"/>
+      <parameter id="k_g_abs" value="8" units="per_hour" constant="false"/>
+      <parameter id="k_pyr_abs" value="4" units="per_hour" constant="false"/>
+      <parameter id="k_pyr_uptake" value="0.03" units="per_hour" constant="false"/>
+      <parameter id="k_pyr_clear" value="0.2" units="per_hour" constant="false"/>
+      <parameter id="k_AA_release_fasting" value="0.02" units="millimole_per_litre_per_hour" constant="false"/>
+      <parameter id="k_AA_liver_uptake" value="0.1" units="per_hour" constant="false"/>
+      <parameter id="k_ketogenesis" value="0.03" units="per_hour" constant="false"/>
+      <parameter id="k_ketone_clearance" value="0.1" units="per_hour" constant="false"/>
+      <parameter id="fasting_ketone_factor" value="1" units="dimensionless" constant="false"/>
+      <parameter id="k_succ_appearance" value="0.005" units="millimole_per_litre_per_hour" constant="false"/>
+      <parameter id="k_succ_clear" value="0.2" units="per_hour" constant="false"/>
+      <parameter id="G_mgdl" value="0" units="millimole_per_litre" constant="false"/>
+    </listOfParameters>
+    <listOfRules>
+      <assignmentRule variable="G_mgdl">
+        <math xmlns="http://www.w3.org/1998/Math/MathML">
+          <apply>
+            <times/>
+            <ci> glucose_mgdl_scale </ci>
+            <ci> G_plasma </ci>
+          </apply>
+        </math>
+      </assignmentRule>
+    </listOfRules>
+    <listOfReactions>
+      <reaction id="source_G_plasma_hgp" reversible="false">
+        <listOfProducts>
+          <speciesReference species="G_plasma" stoichiometry="1" constant="true"/>
+        </listOfProducts>
+        <listOfModifiers>
+          <modifierSpeciesReference species="Pyr_plasma"/>
+          <modifierSpeciesReference species="AA_plasma"/>
+        </listOfModifiers>
+        <kineticLaw>
+          <math xmlns="http://www.w3.org/1998/Math/MathML">
+            <apply>
+              <times/>
+              <apply>
+                <plus/>
+                <ci> k_hgp_base </ci>
+                <apply>
+                  <divide/>
+                  <apply>
+                    <times/>
+                    <ci> V_hgp_pyr </ci>
+                    <ci> ptt_hgp_factor </ci>
+                    <ci> Pyr_plasma </ci>
+                  </apply>
+                  <apply>
+                    <plus/>
+                    <ci> K_pyr_hgp </ci>
+                    <ci> Pyr_plasma </ci>
+                  </apply>
+                </apply>
+                <apply>
+                  <divide/>
+                  <apply>
+                    <times/>
+                    <ci> V_hgp_aa </ci>
+                    <ci> AA_plasma </ci>
+                  </apply>
+                  <apply>
+                    <plus/>
+                    <ci> K_aa_hgp </ci>
+                    <ci> AA_plasma </ci>
+                  </apply>
+                </apply>
+              </apply>
+              <ci> plasma </ci>
+            </apply>
+          </math>
+        </kineticLaw>
+      </reaction>
+      <reaction id="absorb_G_abs_to_G_plasma" reversible="false">
+        <listOfReactants>
+          <speciesReference species="G_abs" stoichiometry="1" constant="true"/>
+        </listOfReactants>
+        <listOfProducts>
+          <speciesReference species="G_plasma" stoichiometry="1" constant="true"/>
+        </listOfProducts>
+        <kineticLaw>
+          <math xmlns="http://www.w3.org/1998/Math/MathML">
+            <apply>
+              <times/>
+              <ci> k_g_abs </ci>
+              <ci> G_abs </ci>
+              <ci> plasma </ci>
+            </apply>
+          </math>
+        </kineticLaw>
+      </reaction>
+      <reaction id="absorb_Pyr_abs_to_Pyr_plasma" reversible="false">
+        <listOfReactants>
+          <speciesReference species="Pyr_abs" stoichiometry="1" constant="true"/>
+        </listOfReactants>
+        <listOfProducts>
+          <speciesReference species="Pyr_plasma" stoichiometry="1" constant="true"/>
+        </listOfProducts>
+        <kineticLaw>
+          <math xmlns="http://www.w3.org/1998/Math/MathML">
+            <apply>
+              <times/>
+              <ci> k_pyr_abs </ci>
+              <ci> Pyr_abs </ci>
+              <ci> plasma </ci>
+            </apply>
+          </math>
+        </kineticLaw>
+      </reaction>
+      <reaction id="clear_G_plasma" reversible="false">
+        <listOfReactants>
+          <speciesReference species="G_plasma" stoichiometry="1" constant="true"/>
+        </listOfReactants>
+        <listOfModifiers>
+          <modifierSpeciesReference species="I_eff"/>
+        </listOfModifiers>
+        <kineticLaw>
+          <math xmlns="http://www.w3.org/1998/Math/MathML">
+            <apply>
+              <times/>
+              <apply>
+                <plus/>
+                <ci> k_clear_base </ci>
+                <apply>
+                  <times/>
+                  <ci> k_clear_ins </ci>
+                  <apply>
+                    <divide/>
+                    <ci> I_eff </ci>
+                    <ci> I_eff_ref </ci>
+                  </apply>
+                </apply>
+              </apply>
+              <ci> G_plasma </ci>
+              <ci> plasma </ci>
+            </apply>
+          </math>
+        </kineticLaw>
+      </reaction>
+      <reaction id="decay_I_eff" reversible="false">
+        <listOfReactants>
+          <speciesReference species="I_eff" stoichiometry="1" constant="true"/>
+        </listOfReactants>
+        <kineticLaw>
+          <math xmlns="http://www.w3.org/1998/Math/MathML">
+            <apply>
+              <times/>
+              <ci> k_I_decay </ci>
+              <ci> I_eff </ci>
+              <ci> plasma </ci>
+            </apply>
+          </math>
+        </kineticLaw>
+      </reaction>
+      <reaction id="source_Pyr_plasma" reversible="false">
+        <listOfProducts>
+          <speciesReference species="Pyr_plasma" stoichiometry="1" constant="true"/>
+        </listOfProducts>
+        <listOfModifiers>
+          <modifierSpeciesReference species="G_plasma"/>
+        </listOfModifiers>
+        <kineticLaw>
+          <math xmlns="http://www.w3.org/1998/Math/MathML">
+            <apply>
+              <times/>
+              <ci> k_pyr_uptake </ci>
+              <ci> G_plasma </ci>
+              <ci> plasma </ci>
+            </apply>
+          </math>
+        </kineticLaw>
+      </reaction>
+      <reaction id="clear_Pyr_plasma" reversible="false">
+        <listOfReactants>
+          <speciesReference species="Pyr_plasma" stoichiometry="1" constant="true"/>
+        </listOfReactants>
+        <kineticLaw>
+          <math xmlns="http://www.w3.org/1998/Math/MathML">
+            <apply>
+              <times/>
+              <ci> k_pyr_clear </ci>
+              <ci> Pyr_plasma </ci>
+              <ci> plasma </ci>
+            </apply>
+          </math>
+        </kineticLaw>
+      </reaction>
+      <reaction id="source_AA_plasma" reversible="false">
+        <listOfProducts>
+          <speciesReference species="AA_plasma" stoichiometry="1" constant="true"/>
+        </listOfProducts>
+        <kineticLaw>
+          <math xmlns="http://www.w3.org/1998/Math/MathML">
+            <apply>
+              <times/>
+              <ci> k_AA_release_fasting </ci>
+              <ci> plasma </ci>
+            </apply>
+          </math>
+        </kineticLaw>
+      </reaction>
+      <reaction id="clear_AA_plasma" reversible="false">
+        <listOfReactants>
+          <speciesReference species="AA_plasma" stoichiometry="1" constant="true"/>
+        </listOfReactants>
+        <kineticLaw>
+          <math xmlns="http://www.w3.org/1998/Math/MathML">
+            <apply>
+              <times/>
+              <ci> k_AA_liver_uptake </ci>
+              <ci> AA_plasma </ci>
+              <ci> plasma </ci>
+            </apply>
+          </math>
+        </kineticLaw>
+      </reaction>
+      <reaction id="ketogenesis_from_AA" reversible="false">
+        <listOfReactants>
+          <speciesReference species="AA_plasma" stoichiometry="1" constant="true"/>
+        </listOfReactants>
+        <listOfProducts>
+          <speciesReference species="Ketone_plasma" stoichiometry="1" constant="true"/>
+        </listOfProducts>
+        <kineticLaw>
+          <math xmlns="http://www.w3.org/1998/Math/MathML">
+            <apply>
+              <times/>
+              <ci> k_ketogenesis </ci>
+              <ci> fasting_ketone_factor </ci>
+              <ci> AA_plasma </ci>
+              <ci> plasma </ci>
+            </apply>
+          </math>
+        </kineticLaw>
+      </reaction>
+      <reaction id="clear_Ketone_plasma" reversible="false">
+        <listOfReactants>
+          <speciesReference species="Ketone_plasma" stoichiometry="1" constant="true"/>
+        </listOfReactants>
+        <kineticLaw>
+          <math xmlns="http://www.w3.org/1998/Math/MathML">
+            <apply>
+              <times/>
+              <ci> k_ketone_clearance </ci>
+              <ci> Ketone_plasma </ci>
+              <ci> plasma </ci>
+            </apply>
+          </math>
+        </kineticLaw>
+      </reaction>
+      <reaction id="source_Succ_plasma" reversible="false">
+        <listOfProducts>
+          <speciesReference species="Succ_plasma" stoichiometry="1" constant="true"/>
+        </listOfProducts>
+        <kineticLaw>
+          <math xmlns="http://www.w3.org/1998/Math/MathML">
+            <apply>
+              <times/>
+              <ci> k_succ_appearance </ci>
+              <ci> plasma </ci>
+            </apply>
+          </math>
+        </kineticLaw>
+      </reaction>
+      <reaction id="clear_Succ_plasma" reversible="false">
+        <listOfReactants>
+          <speciesReference species="Succ_plasma" stoichiometry="1" constant="true"/>
+        </listOfReactants>
+        <kineticLaw>
+          <math xmlns="http://www.w3.org/1998/Math/MathML">
+            <apply>
+              <times/>
+              <ci> k_succ_clear </ci>
+              <ci> Succ_plasma </ci>
+              <ci> plasma </ci>
+            </apply>
+          </math>
+        </kineticLaw>
+      </reaction>
+    </listOfReactions>
+  </model>
+</sbml>

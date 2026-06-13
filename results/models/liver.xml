@@ -1,0 +1,302 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<sbml xmlns="http://www.sbml.org/sbml/level3/version2/core" level="3" version="2">
+  <model id="liver" substanceUnits="millimole" timeUnits="hour" extentUnits="millimole">
+    <listOfUnitDefinitions>
+      <unitDefinition id="millimole">
+        <listOfUnits>
+          <unit kind="mole" exponent="1" scale="-3" multiplier="1"/>
+        </listOfUnits>
+      </unitDefinition>
+      <unitDefinition id="hour">
+        <listOfUnits>
+          <unit kind="second" exponent="1" scale="0" multiplier="3600"/>
+        </listOfUnits>
+      </unitDefinition>
+      <unitDefinition id="per_hour">
+        <listOfUnits>
+          <unit kind="second" exponent="-1" scale="0" multiplier="3600"/>
+        </listOfUnits>
+      </unitDefinition>
+      <unitDefinition id="millimole_per_litre">
+        <listOfUnits>
+          <unit kind="mole" exponent="1" scale="-3" multiplier="1"/>
+          <unit kind="litre" exponent="-1" scale="0" multiplier="1"/>
+        </listOfUnits>
+      </unitDefinition>
+      <unitDefinition id="millimole_per_litre_per_hour">
+        <listOfUnits>
+          <unit kind="mole" exponent="1" scale="-3" multiplier="1"/>
+          <unit kind="litre" exponent="-1" scale="0" multiplier="1"/>
+          <unit kind="second" exponent="-1" scale="0" multiplier="3600"/>
+        </listOfUnits>
+      </unitDefinition>
+    </listOfUnitDefinitions>
+    <listOfCompartments>
+      <compartment id="hepatocyte_cytosol" size="1" units="litre" constant="true"/>
+      <compartment id="mitochondrion" size="0.3" units="litre" constant="true"/>
+      <compartment id="extracellular_medium" size="1" units="litre" constant="true"/>
+    </listOfCompartments>
+    <listOfSpecies>
+      <species id="G6P_liver" compartment="hepatocyte_cytosol" initialConcentration="1" substanceUnits="millimole" hasOnlySubstanceUnits="false" boundaryCondition="false" constant="false"/>
+      <species id="Glycogen_liver" compartment="hepatocyte_cytosol" initialConcentration="100" substanceUnits="millimole" hasOnlySubstanceUnits="false" boundaryCondition="false" constant="false"/>
+      <species id="Pyr_liver" compartment="hepatocyte_cytosol" initialConcentration="0.1" substanceUnits="millimole" hasOnlySubstanceUnits="false" boundaryCondition="false" constant="false"/>
+      <species id="Succ_mito" compartment="mitochondrion" initialConcentration="0.1" substanceUnits="millimole" hasOnlySubstanceUnits="false" boundaryCondition="false" constant="false"/>
+      <species id="Succ_extra" compartment="extracellular_medium" initialConcentration="0" substanceUnits="millimole" hasOnlySubstanceUnits="false" boundaryCondition="false" constant="false"/>
+      <species id="Mito_capacity" compartment="mitochondrion" initialConcentration="1" substanceUnits="millimole" hasOnlySubstanceUnits="false" boundaryCondition="false" constant="false"/>
+    </listOfSpecies>
+    <listOfParameters>
+      <parameter id="Mito_capacity_ref" value="1" units="millimole_per_litre" constant="false"/>
+      <parameter id="k_glucose_uptake" value="0.05" units="per_hour" constant="false"/>
+      <parameter id="k_glycogen_synthesis" value="0.03" units="per_hour" constant="false"/>
+      <parameter id="k_glycogenolysis" value="0.03" units="per_hour" constant="false"/>
+      <parameter id="k_gng_pyr" value="0.03" units="per_hour" constant="false"/>
+      <parameter id="k_gng_aa" value="0.03" units="per_hour" constant="false"/>
+      <parameter id="k_glycolysis" value="0.05" units="per_hour" constant="false"/>
+      <parameter id="k_TCA_glucose" value="0.05" units="per_hour" constant="false"/>
+      <parameter id="k_gln_anaplerosis" value="0.02" units="millimole_per_litre_per_hour" constant="false"/>
+      <parameter id="k_lactate_export" value="0.08" units="per_hour" constant="false"/>
+      <parameter id="k_succ_export" value="0.1" units="per_hour" constant="false"/>
+      <parameter id="k_succ_clear" value="0.2" units="per_hour" constant="false"/>
+      <parameter id="k_mito_adapt" value="0.1" units="per_hour" constant="false"/>
+      <parameter id="mito_target" value="0.3" units="millimole_per_litre" constant="false"/>
+      <parameter id="mito_sucnr1_gain" value="1" units="dimensionless" constant="false"/>
+      <parameter id="mito_sucnr1_baseline" value="1" units="dimensionless" constant="false"/>
+      <parameter id="K_sucnr1" value="0.03" units="millimole_per_litre" constant="false"/>
+      <parameter id="genotype_sucnr1" value="1" units="dimensionless" constant="false"/>
+      <parameter id="ligand_factor" value="1" units="dimensionless" constant="false"/>
+      <parameter id="antagonist_factor" value="1" units="dimensionless" constant="false"/>
+      <parameter id="ocr_scale" value="300" units="dimensionless" constant="false"/>
+      <parameter id="ecar_scale" value="20" units="dimensionless" constant="false"/>
+      <parameter id="mito_ocr_scale" value="500" units="dimensionless" constant="false"/>
+      <parameter id="SUCNR1_activity" value="0" units="dimensionless" constant="false"/>
+      <parameter id="OCR_proxy" value="0" units="millimole_per_litre" constant="false"/>
+      <parameter id="ECAR_proxy" value="0" units="millimole_per_litre" constant="false"/>
+      <parameter id="mito_OCR_proxy" value="0" units="millimole_per_litre" constant="false"/>
+    </listOfParameters>
+    <listOfRules>
+      <assignmentRule variable="SUCNR1_activity">
+        <math xmlns="http://www.w3.org/1998/Math/MathML">
+          <apply>
+            <times/>
+            <ci> genotype_sucnr1 </ci>
+            <ci> ligand_factor </ci>
+            <ci> antagonist_factor </ci>
+          </apply>
+        </math>
+      </assignmentRule>
+      <assignmentRule variable="OCR_proxy">
+        <math xmlns="http://www.w3.org/1998/Math/MathML">
+          <apply>
+            <times/>
+            <ci> ocr_scale </ci>
+            <ci> Mito_capacity </ci>
+          </apply>
+        </math>
+      </assignmentRule>
+      <assignmentRule variable="ECAR_proxy">
+        <math xmlns="http://www.w3.org/1998/Math/MathML">
+          <apply>
+            <times/>
+            <ci> ecar_scale </ci>
+            <ci> Pyr_liver </ci>
+          </apply>
+        </math>
+      </assignmentRule>
+      <assignmentRule variable="mito_OCR_proxy">
+        <math xmlns="http://www.w3.org/1998/Math/MathML">
+          <apply>
+            <times/>
+            <ci> mito_ocr_scale </ci>
+            <ci> Mito_capacity </ci>
+          </apply>
+        </math>
+      </assignmentRule>
+    </listOfRules>
+    <listOfReactions>
+      <reaction id="glycogenolysis_to_G6P" reversible="false">
+        <listOfReactants>
+          <speciesReference species="Glycogen_liver" stoichiometry="1" constant="true"/>
+        </listOfReactants>
+        <listOfProducts>
+          <speciesReference species="G6P_liver" stoichiometry="1" constant="true"/>
+        </listOfProducts>
+        <kineticLaw>
+          <math xmlns="http://www.w3.org/1998/Math/MathML">
+            <apply>
+              <times/>
+              <ci> k_glycogenolysis </ci>
+              <ci> Glycogen_liver </ci>
+              <ci> hepatocyte_cytosol </ci>
+            </apply>
+          </math>
+        </kineticLaw>
+      </reaction>
+      <reaction id="glycogen_synthesis_from_G6P" reversible="false">
+        <listOfReactants>
+          <speciesReference species="G6P_liver" stoichiometry="1" constant="true"/>
+        </listOfReactants>
+        <listOfProducts>
+          <speciesReference species="Glycogen_liver" stoichiometry="1" constant="true"/>
+        </listOfProducts>
+        <kineticLaw>
+          <math xmlns="http://www.w3.org/1998/Math/MathML">
+            <apply>
+              <times/>
+              <ci> k_glycogen_synthesis </ci>
+              <ci> G6P_liver </ci>
+              <ci> hepatocyte_cytosol </ci>
+            </apply>
+          </math>
+        </kineticLaw>
+      </reaction>
+      <reaction id="glycolysis_G6P_to_Pyr" reversible="false">
+        <listOfReactants>
+          <speciesReference species="G6P_liver" stoichiometry="1" constant="true"/>
+        </listOfReactants>
+        <listOfProducts>
+          <speciesReference species="Pyr_liver" stoichiometry="1" constant="true"/>
+        </listOfProducts>
+        <kineticLaw>
+          <math xmlns="http://www.w3.org/1998/Math/MathML">
+            <apply>
+              <times/>
+              <ci> k_glycolysis </ci>
+              <ci> G6P_liver </ci>
+              <ci> hepatocyte_cytosol </ci>
+            </apply>
+          </math>
+        </kineticLaw>
+      </reaction>
+      <reaction id="gng_Pyr_to_G6P" reversible="false">
+        <listOfReactants>
+          <speciesReference species="Pyr_liver" stoichiometry="1" constant="true"/>
+        </listOfReactants>
+        <listOfProducts>
+          <speciesReference species="G6P_liver" stoichiometry="1" constant="true"/>
+        </listOfProducts>
+        <kineticLaw>
+          <math xmlns="http://www.w3.org/1998/Math/MathML">
+            <apply>
+              <times/>
+              <ci> k_gng_pyr </ci>
+              <ci> Pyr_liver </ci>
+              <ci> hepatocyte_cytosol </ci>
+            </apply>
+          </math>
+        </kineticLaw>
+      </reaction>
+      <reaction id="gln_anaplerosis_to_Succ_mito" reversible="false">
+        <listOfProducts>
+          <speciesReference species="Succ_mito" stoichiometry="1" constant="true"/>
+        </listOfProducts>
+        <kineticLaw>
+          <math xmlns="http://www.w3.org/1998/Math/MathML">
+            <apply>
+              <times/>
+              <ci> k_gln_anaplerosis </ci>
+              <ci> mitochondrion </ci>
+            </apply>
+          </math>
+        </kineticLaw>
+      </reaction>
+      <reaction id="TCA_Pyr_to_Succ_mito" reversible="false">
+        <listOfReactants>
+          <speciesReference species="Pyr_liver" stoichiometry="1" constant="true"/>
+        </listOfReactants>
+        <listOfProducts>
+          <speciesReference species="Succ_mito" stoichiometry="1" constant="true"/>
+        </listOfProducts>
+        <listOfModifiers>
+          <modifierSpeciesReference species="Mito_capacity"/>
+        </listOfModifiers>
+        <kineticLaw>
+          <math xmlns="http://www.w3.org/1998/Math/MathML">
+            <apply>
+              <times/>
+              <ci> k_TCA_glucose </ci>
+              <apply>
+                <divide/>
+                <ci> Mito_capacity </ci>
+                <ci> Mito_capacity_ref </ci>
+              </apply>
+              <ci> Pyr_liver </ci>
+              <ci> hepatocyte_cytosol </ci>
+            </apply>
+          </math>
+        </kineticLaw>
+      </reaction>
+      <reaction id="export_Succ_mito_to_extra" reversible="false">
+        <listOfReactants>
+          <speciesReference species="Succ_mito" stoichiometry="1" constant="true"/>
+        </listOfReactants>
+        <listOfProducts>
+          <speciesReference species="Succ_extra" stoichiometry="1" constant="true"/>
+        </listOfProducts>
+        <kineticLaw>
+          <math xmlns="http://www.w3.org/1998/Math/MathML">
+            <apply>
+              <times/>
+              <ci> k_succ_export </ci>
+              <ci> Succ_mito </ci>
+              <ci> mitochondrion </ci>
+            </apply>
+          </math>
+        </kineticLaw>
+      </reaction>
+      <reaction id="clear_Succ_extra" reversible="false">
+        <listOfReactants>
+          <speciesReference species="Succ_extra" stoichiometry="1" constant="true"/>
+        </listOfReactants>
+        <kineticLaw>
+          <math xmlns="http://www.w3.org/1998/Math/MathML">
+            <apply>
+              <times/>
+              <ci> k_succ_clear </ci>
+              <ci> Succ_extra </ci>
+              <ci> extracellular_medium </ci>
+            </apply>
+          </math>
+        </kineticLaw>
+      </reaction>
+      <reaction id="produce_Mito_capacity" reversible="false">
+        <listOfProducts>
+          <speciesReference species="Mito_capacity" stoichiometry="1" constant="true"/>
+        </listOfProducts>
+        <kineticLaw>
+          <math xmlns="http://www.w3.org/1998/Math/MathML">
+            <apply>
+              <times/>
+              <ci> k_mito_adapt </ci>
+              <ci> mito_target </ci>
+              <apply>
+                <plus/>
+                <ci> mito_sucnr1_baseline </ci>
+                <apply>
+                  <times/>
+                  <ci> mito_sucnr1_gain </ci>
+                  <ci> SUCNR1_activity </ci>
+                </apply>
+              </apply>
+              <ci> mitochondrion </ci>
+            </apply>
+          </math>
+        </kineticLaw>
+      </reaction>
+      <reaction id="decay_Mito_capacity" reversible="false">
+        <listOfReactants>
+          <speciesReference species="Mito_capacity" stoichiometry="1" constant="true"/>
+        </listOfReactants>
+        <kineticLaw>
+          <math xmlns="http://www.w3.org/1998/Math/MathML">
+            <apply>
+              <times/>
+              <ci> k_mito_adapt </ci>
+              <ci> Mito_capacity </ci>
+              <ci> mitochondrion </ci>
+            </apply>
+          </math>
+        </kineticLaw>
+      </reaction>
+    </listOfReactions>
+  </model>
+</sbml>
