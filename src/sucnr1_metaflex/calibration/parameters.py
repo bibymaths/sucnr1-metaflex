@@ -26,6 +26,7 @@ class FitConfig(BaseModel):
     include_assays: Optional[List[str]] = None
     exclude_assays: List[str] = Field(default_factory=list)
     optimiser: Dict[str, float | int | str] = Field(default_factory=dict)
+    performance: Dict[str, bool | float | int | str] = Field(default_factory=dict)
 
 
 def load_fit_config(config_path: str) -> FitConfig:

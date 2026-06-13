@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 from pathlib import Path
+from dataclasses import dataclass
 from typing import Dict, Iterable
 
 import numpy as np
@@ -11,6 +12,7 @@ import pandas as pd
 from loguru import logger
 
 from sucnr1_metaflex.simulation.roadrunner_engine import load_model
+from .numba_kernels import NUMBA_AVAILABLE, interp_linear, log10_transform, seahorse_shape, weighted_residuals
 from .protocols import detect_condition_column, evaluate_shape, load_protocol_config, resolve_condition_factors, resolve_initial_conditions, resolve_protocol
 
 
@@ -97,7 +99,8 @@ def _available_model_symbols(model_path: str) -> tuple[frozenset[str], frozenset
         "getCompartmentIds",
         "getReactionIds",
     ]:
-        fn = getattr(rr.model, getter, None)
+        model = getattr(rr, "model", rr)
+        fn = getattr(model, getter, None)
         if callable(fn):
             try:
                 values = {str(x) for x in fn()}
@@ -130,6 +133,7 @@ def _simulate_fitted_to_times(
     selections: list[str],
     initial_conditions: Dict[str, float] | None = None,
     condition_factors: Dict[str, float] | None = None,
+    rr: object | None = None,
 ) -> pd.DataFrame:
     """Simulate a fitted model to requested times without losing parameters."""
     model_path = str(model_path)
@@ -143,7 +147,10 @@ def _simulate_fitted_to_times(
             f"{missing_selections}"
         )
 
-    rr = load_model(model_path)
+    rr = load_model(model_path) if rr is None else rr
+    reset_all = getattr(rr, "resetAll", None)
+    if callable(reset_all):
+        reset_all()
     _set_rr_parameters_strict(rr, params, model_path)
     _, global_params = _available_model_symbols(model_path)
     all_symbols, _ = _available_model_symbols(model_path)
@@ -197,10 +204,89 @@ def _simulate_fitted_to_times(
         if not np.all(np.isfinite(values)):
             raise ValueError(f"Simulation returned non-finite values for {col}")
 
-        out[col] = np.interp(unique_times, sim_time, values)
+        out[col] = interp_linear(unique_times, sim_time, values, use_numba=False)
 
     return out
 
+
+
+@dataclass(frozen=True)
+class ResidualGroup:
+    assay: str
+    cond_col: str | None
+    condition: str
+    observable: str
+    times: np.ndarray
+    observed: np.ndarray
+    weights: np.ndarray
+
+
+@dataclass(frozen=True)
+class ResidualContext:
+    groups: tuple[ResidualGroup, ...]
+    n_expected: int
+    use_numba: bool
+    numba_available: bool
+
+    @property
+    def simulations_per_evaluation(self) -> int:
+        return len(self.groups)
+
+
+def prepare_residual_context(
+    data: pd.DataFrame,
+    assay_weights: Dict[str, float],
+    observables: Dict[str, str],
+    use_numba: bool | None = None,
+) -> ResidualContext:
+    """Precompute numeric residual metadata outside optimizer hot loops."""
+    groups: list[ResidualGroup] = []
+    for assay, cond_col, condition, observable, agg in _aggregated_assay_tables(data, observables):
+        times = agg["time"].to_numpy(dtype=float)
+        observed = pd.to_numeric(agg["observed_mean"], errors="coerce").to_numpy(dtype=float)
+        weight_value = float(assay_weights.get(str(assay), 1.0))
+        weights = np.full(observed.shape, weight_value, dtype=float)
+        groups.append(
+            ResidualGroup(
+                assay=str(assay),
+                cond_col=cond_col,
+                condition=str(condition),
+                observable=str(observable),
+                times=times,
+                observed=observed,
+                weights=weights,
+            )
+        )
+    enabled = NUMBA_AVAILABLE if use_numba is None else bool(use_numba and NUMBA_AVAILABLE)
+    return ResidualContext(
+        groups=tuple(groups),
+        n_expected=int(sum(g.observed.size for g in groups)),
+        use_numba=enabled,
+        numba_available=NUMBA_AVAILABLE,
+    )
+
+
+def _shape_multiplier(protocol: dict, times: np.ndarray, params: Dict[str, float], use_numba: bool) -> np.ndarray:
+    name = protocol.get("shape")
+    if not name:
+        return np.ones_like(times, dtype=float)
+    if str(name) == "seahorse_ocr":
+        values = np.array([
+            params.get("ocr_basal", 1.0), params.get("ocr_peak_amp", 0.0),
+            params.get("ocr_peak_time", 1.0), params.get("ocr_peak_width", 0.18),
+            params.get("ocr_drop_amp", 0.0), params.get("ocr_drop_time", 1.5),
+            params.get("ocr_drop_width", 0.22), params.get("min_shape", 1.0e-6),
+        ], dtype=float)
+        return seahorse_shape(times, 1, values, use_numba=use_numba)
+    if str(name) == "seahorse_ecar":
+        values = np.array([
+            params.get("ecar_basal", 1.0), params.get("ecar_peak_amp", 0.0),
+            params.get("ecar_peak_time", 1.0), params.get("ecar_peak_width", 0.20),
+            params.get("ecar_drop_amp", 0.0), params.get("ecar_drop_time", 1.5),
+            params.get("ecar_drop_width", 0.25), params.get("min_shape", 1.0e-6),
+        ], dtype=float)
+        return seahorse_shape(times, 2, values, use_numba=use_numba)
+    return evaluate_shape(name, times, params)
 
 def compute_residuals(
     x_log: np.ndarray,
@@ -209,14 +295,16 @@ def compute_residuals(
     model_path: str,
     assay_weights: Dict[str, float],
     observables: Dict[str, str],
+    context: ResidualContext | None = None,
+    use_numba: bool | None = None,
 ) -> np.ndarray:
     """Compute fixed-length residual vector for log10 parameters.
 
     Parameters are optimized in log10 space and converted to linear space
     before being applied to the SBML model.
     """
-    tables = _aggregated_assay_tables(data, observables)
-    n_expected = int(sum(len(table) for _, _, _, _, table in tables))
+    ctx = context or prepare_residual_context(data, assay_weights, observables, use_numba=use_numba)
+    n_expected = ctx.n_expected
 
     if n_expected <= 0:
         return _penalty_vector(1)
@@ -231,8 +319,8 @@ def compute_residuals(
 
     try:
         params = {
-            str(name): float(10.0 ** value)
-            for name, value in zip(param_names, x_log)
+            str(name): float(value)
+            for name, value in zip(param_names, log10_transform(x_log, ctx.use_numba))
         }
     except Exception:
         return _penalty_vector(n_expected)
@@ -251,8 +339,13 @@ def compute_residuals(
     residual_parts: list[np.ndarray] = []
 
     try:
-        for assay, cond_col, condition, observable, agg in tables:
-            times = agg["time"].to_numpy(dtype=float)
+        rr = load_model(str(model_path))
+        for group in ctx.groups:
+            assay = group.assay
+            cond_col = group.cond_col
+            condition = group.condition
+            observable = group.observable
+            times = group.times
             protocol = resolve_protocol(assay, protocols)
             initial_conditions = resolve_initial_conditions(protocol, params)
             factors = (
@@ -270,11 +363,12 @@ def compute_residuals(
                 selections=[observable],
                 initial_conditions=initial_conditions,
                 condition_factors=factors,
+                rr=rr,
             )
 
             pred = pd.to_numeric(sim[observable], errors="coerce").to_numpy(dtype=float)
-            pred = pred * evaluate_shape(protocol.get("shape"), times, params)
-            obs = pd.to_numeric(agg["observed_mean"], errors="coerce").to_numpy(dtype=float)
+            pred = pred * _shape_multiplier(protocol, times, params, ctx.use_numba)
+            obs = group.observed
 
             if pred.shape[0] != obs.shape[0]:
                 logger.error(
@@ -290,8 +384,7 @@ def compute_residuals(
                 )
                 return _penalty_vector(n_expected)
 
-            weight = float(assay_weights.get(str(assay), 1.0))
-            residual = weight * (pred - obs)
+            residual = weighted_residuals(pred, obs, group.weights, use_numba=ctx.use_numba)
 
             if not np.all(np.isfinite(residual)):
                 return _penalty_vector(n_expected)

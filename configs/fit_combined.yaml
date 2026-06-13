@@ -282,3 +282,6 @@ optimiser:
   maxls: 20
   n_starts: 10
   random_seed: 42
+
+performance:
+  use_numba: true
