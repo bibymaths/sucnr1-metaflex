@@ -7,7 +7,7 @@ name = "sucnr1-metaflex"
 version = "0.1.0"
 description = "Phenomenological SBML-based model of SUCNR1-dependent hepatic metabolic flexibility"
 authors = [
-  {name = "OpenAI Assistant", email = "assistant@example.com"}
+  {name = "Abhinav Mishra", email = "mishraabhinav36@gmail.com"}
 ]
 readme = "README.md"
 license = {text = "MIT"}
@@ -46,3 +46,4 @@ sucnr1-sim = "sucnr1_metaflex.cli:sim_app"
 sucnr1-scenarios = "sucnr1_metaflex.cli:scenario_app"
 sucnr1-report = "sucnr1_metaflex.cli:report_app"
 sucnr1-dashboard = "sucnr1_metaflex.cli:dashboard_app"
+sucnr1-plot = "sucnr1_metaflex.visualization.cli:plot_app"

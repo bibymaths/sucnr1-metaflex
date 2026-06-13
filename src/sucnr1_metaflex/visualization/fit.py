@@ -1,0 +1,265 @@
+"""Calibration and model-fit plots."""
+
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Dict
+
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+from loguru import logger
+
+from sucnr1_metaflex.calibration.parameters import load_fit_config
+from sucnr1_metaflex.simulation.protocols import load_dynamic_body_data
+from sucnr1_metaflex.simulation.roadrunner_engine import load_model, simulate_to_times
+
+from .io import load_parameter_file, numeric_time_value_frame
+from .style import apply_mpl_style, ensure_dir, safe_slug, save_figure
+
+
+def _set_rr_parameters(rr: object, params: Dict[str, float]) -> None:
+    for pid, value in params.items():
+        try:
+            rr[pid] = float(value)  # type: ignore[index]
+        except Exception:
+            continue
+
+
+def plot_ranked_multistart(
+    fit_dir: str | Path,
+    out_dir: str | Path,
+) -> Path | None:
+    """Plot ranked multistart losses."""
+    apply_mpl_style()
+    fit_path = Path(fit_dir)
+    out = ensure_dir(out_dir)
+
+    ranked_path = fit_path / "ranked_multistart.csv"
+    if not ranked_path.exists():
+        logger.warning(f"Missing ranked multistart file: {ranked_path}")
+        return None
+
+    df = pd.read_csv(ranked_path)
+    if df.empty or "loss" not in df.columns:
+        logger.warning(f"Ranked multistart file has no loss column: {ranked_path}")
+        return None
+
+    df = df.sort_values("loss").reset_index(drop=True)
+    df["rank"] = np.arange(1, len(df) + 1)
+
+    fig, ax = plt.subplots(figsize=(7.0, 4.2))
+    ax.plot(df["rank"], df["loss"], marker="o", linewidth=1.5)
+    ax.set_title("Ranked multistart losses")
+    ax.set_xlabel("Rank")
+    ax.set_ylabel("Loss")
+    ax.set_yscale("log")
+
+    path = out / "ranked_multistart_loss.png"
+    return save_figure(fig, path)
+
+
+def plot_best_parameters(
+    params_path: str | Path,
+    out_dir: str | Path,
+    top_n: int | None = None,
+) -> Path:
+    """Plot fitted parameter values on log10 scale."""
+    apply_mpl_style()
+    out = ensure_dir(out_dir)
+
+    params = load_parameter_file(params_path)
+    series = pd.Series(params, dtype=float)
+    series = series[series > 0.0]
+    series = np.log10(series).sort_values()
+
+    if top_n is not None and top_n > 0:
+        series = series.iloc[:top_n]
+
+    height = max(4.5, 0.28 * len(series))
+    fig, ax = plt.subplots(figsize=(8.0, height))
+    ax.barh(series.index.astype(str), series.to_numpy(dtype=float))
+    ax.set_title("Best-fit parameters")
+    ax.set_xlabel("log10(value)")
+    ax.set_ylabel("Parameter")
+
+    path = out / "best_parameters_log10.png"
+    return save_figure(fig, path)
+
+
+def compute_fit_residual_table(
+    data_dir: str | Path,
+    model_path: str | Path,
+    params_path: str | Path,
+    config_path: str | Path,
+) -> pd.DataFrame:
+    """Compute observed, predicted and residual values by assay/time."""
+    data = load_dynamic_body_data(str(data_dir))
+    data = numeric_time_value_frame(data)
+
+    fit_cfg = load_fit_config(str(config_path))
+    observables = getattr(fit_cfg, "observables", {}) or {}
+    params = load_parameter_file(params_path)
+
+    records: list[dict[str, object]] = []
+
+    for assay, assay_df in data.groupby("assay", dropna=False):
+        assay = str(assay)
+        species_id = str(observables.get(assay, "G_plasma"))
+
+        agg = (
+            assay_df.groupby("time", as_index=False)["value"]
+            .agg(["mean", "std", "count"])
+            .reset_index()
+            .sort_values("time")
+        )
+
+        if agg.empty:
+            continue
+
+        times = agg["time"].to_numpy(dtype=float)
+
+        rr = load_model(str(model_path))
+        _set_rr_parameters(rr, params)
+
+        try:
+            sim = simulate_to_times(rr, times, selections=[species_id])
+        except Exception as exc:
+            logger.warning(f"Skipping assay={assay}; simulation failed for {species_id}: {exc}")
+            continue
+
+        if species_id not in sim.columns:
+            logger.warning(f"Skipping assay={assay}; missing simulated species {species_id}")
+            continue
+
+        pred = pd.to_numeric(sim[species_id], errors="coerce").to_numpy(dtype=float)
+
+        for idx, row in agg.iterrows():
+            observed = float(row["mean"])
+            predicted = float(pred[len(records) - len(records)]) if False else None
+
+        for i, row in agg.reset_index(drop=True).iterrows():
+            observed = float(row["mean"])
+            predicted = float(pred[i])
+            records.append(
+                {
+                    "assay": assay,
+                    "observable": species_id,
+                    "time": float(row["time"]),
+                    "observed_mean": observed,
+                    "observed_sd": float(row["std"]) if pd.notna(row["std"]) else np.nan,
+                    "n": int(row["count"]),
+                    "predicted": predicted,
+                    "residual": predicted - observed,
+                }
+            )
+
+    return pd.DataFrame.from_records(records)
+
+
+def plot_model_fit(
+    data_dir: str | Path,
+    model_path: str | Path,
+    params_path: str | Path,
+    config_path: str | Path,
+    out_dir: str | Path,
+) -> list[Path]:
+    """Plot observed mean ± SD against fitted model prediction."""
+    apply_mpl_style()
+    out = ensure_dir(out_dir)
+
+    table = compute_fit_residual_table(
+        data_dir=data_dir,
+        model_path=model_path,
+        params_path=params_path,
+        config_path=config_path,
+    )
+
+    if table.empty:
+        logger.warning("No fit residual table rows generated.")
+        return []
+
+    residual_csv = out / "fit_observed_predicted_residuals.csv"
+    table.to_csv(residual_csv, index=False)
+
+    written: list[Path] = []
+
+    for assay, assay_df in table.groupby("assay", dropna=False):
+        assay = str(assay)
+        species_id = str(assay_df["observable"].iloc[0])
+
+        fig, ax = plt.subplots(figsize=(7.0, 4.5))
+
+        yerr = assay_df["observed_sd"].fillna(0.0).to_numpy(dtype=float)
+
+        ax.errorbar(
+            assay_df["time"].to_numpy(dtype=float),
+            assay_df["observed_mean"].to_numpy(dtype=float),
+            yerr=yerr,
+            marker="o",
+            linestyle="none",
+            capsize=2,
+            label="Observed mean",
+        )
+
+        ax.plot(
+            assay_df["time"].to_numpy(dtype=float),
+            assay_df["predicted"].to_numpy(dtype=float),
+            marker="x",
+            linewidth=1.5,
+            label=f"Model: {species_id}",
+        )
+
+        ax.set_title(f"Fit: {assay}")
+        ax.set_xlabel("Time")
+        ax.set_ylabel(species_id)
+        ax.legend(fontsize=8)
+
+        path = out / f"fit__{safe_slug(assay)}__{safe_slug(species_id)}.png"
+        save_figure(fig, path)
+        written.append(path)
+
+    logger.info(f"Wrote {len(written)} fit plots to {out}")
+    return written
+
+
+def plot_fit_diagnostics(
+    fit_dir: str | Path,
+    data_dir: str | Path,
+    model_path: str | Path,
+    config_path: str | Path,
+    out_dir: str | Path,
+) -> list[Path]:
+    """Generate all standard fit diagnostic plots."""
+    out = ensure_dir(out_dir)
+    fit_path = Path(fit_dir)
+
+    written: list[Path] = []
+
+    ranked = plot_ranked_multistart(fit_path, out)
+    if ranked is not None:
+        written.append(ranked)
+
+    params_json = fit_path / "best_parameters.json"
+    params_csv = fit_path / "best_parameters.csv"
+
+    if params_json.exists():
+        params_path = params_json
+    elif params_csv.exists():
+        params_path = params_csv
+    else:
+        logger.warning(f"No best parameter file found in {fit_path}")
+        return written
+
+    written.append(plot_best_parameters(params_path, out))
+    written.extend(
+        plot_model_fit(
+            data_dir=data_dir,
+            model_path=model_path,
+            params_path=params_path,
+            config_path=config_path,
+            out_dir=out / "model_fit",
+        )
+    )
+
+    return written
