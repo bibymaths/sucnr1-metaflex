@@ -19,6 +19,8 @@ allows calibration of rate constants to experimental time–series data.
 > kinetic and structural choices are phenomenological and should be
 > revisited as new data become available.
 
+--- 
+
 ## Scientific aim
 
 Succinate is both an intermediate of the tricarboxylic acid (TCA)
@@ -40,118 +42,411 @@ install the package and its dependencies.  Python 3.11 or higher is
 required.
 
 ```bash
-git clone <repository>
+git clone https://github.com/bibymaths/sucnr1-metaflex.git
 cd sucnr1-metaflex
 uv pip install .[dev]
 ```
 
-Alternatively, install the core requirements:
+--- 
+
+## Step-wise workflow
+
+The commands below assume that the package is installed in the active environment and that the repository is being run from the project root.
 
 ```bash
-uv pip install numpy pandas scipy pydantic pyyaml openpyxl typer[all] rich loguru \
-  matplotlib plotly dash python-libsbml sbmlutils sbmlsim libroadrunner scikit-learn
+uv pip install -e ".[dev]"
 ```
 
-## Quick start
+or, with an already active virtual environment:
 
-1. **Inspect and ingest the data:**
+```bash
+pip install -e ".[dev]"
+```
 
-   ```bash
-   sucnr1-data inventory --zip data/Beltran2026_Supp.zip --out results
-   sucnr1-data ingest --zip data/Beltran2026_Supp.zip --out results/processed
-   ```
+### 1. Ingest and clean the supplementary data
 
-   The `inventory` command reports the names of all workbooks and
-   sheets in the zip archive.  The `ingest` command extracts the
-   spreadsheets and converts selected dynamic assays to a tidy format
-   with time, replicate and genotype information.  Results are
-   written to CSV files in the `results/processed` directory.
+Inspect the supplementary archive:
 
-2. **Build the SBML models:**
+```bash
+sucnr1-data inventory \
+  --zip data/Beltran2026_Supp.zip \
+  --out results
+```
 
-   ```bash
-   sucnr1-build body --config configs/model_body.yaml --out results/models/body.xml
-   sucnr1-build liver --config configs/model_liver.yaml --out results/models/liver.xml
-   sucnr1-build combined --config configs/model_combined.yaml --out results/models/body_liver.xml
-   ```
+Parse the selected dynamic assays into tidy CSV files:
 
-   These commands generate SBML Level 3 version 2 documents that
-   describe the plasma, hepatic and coupled systems.  All models
-   declare explicit units, compartments and state variables.  After
-   generation, the code validates the XML with `libsbml` and reports
-   any inconsistencies.
+```bash
+sucnr1-data ingest \
+  --zip data/Beltran2026_Supp.zip \
+  --out results/processed
+```
 
-3. **Fit the model to data:**
+After ingestion, clean assay time units and remove AUC pseudo-time rows:
 
-   ```bash
-   sucnr1-fit run --data results/processed --config configs/fit.yaml --out results/runs --n-starts 10
-   ```
+```bash
+python - <<'PY'
+import pandas as pd
+from pathlib import Path
 
-   A basic least–squares objective is formulated from the glucose
-   tolerance test (GTT), insulin tolerance test (ITT), pyruvate
-   tolerance test (PTT), fasting glucose and fasting ketone data.  The
-   optimiser performs multiple random initialisations (`--n-starts`)
-   and ranks solutions by total loss.  Best‐fitting parameters are
-   stored as CSV/JSON alongside residual plots.
+p = Path("results/processed")
 
-4. **Simulate scenarios:**
+body = pd.read_csv(p / "dynamic_body.csv")
+sea = pd.read_csv(p / "dynamic_seahorse.csv")
 
-   ```bash
-   sucnr1-sim steady-state --model results/runs/<run>/models/body_liver.xml \
-     --params results/runs/<run>/fit/best_parameters.json
-   sucnr1-sim forward --model results/runs/<run>/models/body_liver.xml \
-     --params results/runs/<run>/fit/best_parameters.json --protocol fasting
-   sucnr1-scenarios run --run results/runs/<run> --config configs/scenarios.yaml
-   ```
+body["assay"] = body["assay"].astype(str)
+sea["assay"] = sea["assay"].astype(str)
 
-   Steady–state and forward simulations allow inspection of model
-   behaviour outside of the experimental time points.  The scenario
-   engine applies multiplicative perturbations to reaction rates or
-   initial conditions to emulate gene knockouts or pharmacological
-   inhibition.  Results are saved as CSV and PNG.
+minute_assays = {
+    "GTT", "GTT_female",
+    "ITT", "ITT_female",
+    "PTT", "PTT_female",
+}
 
-5. **Generate reports and launch the dashboard:**
+fasting_assays = {
+    "fasting_glucose",
+    "fasting_ketone",
+}
 
-   ```bash
-   sucnr1-report build --run results/runs/<run>
-   sucnr1-dashboard --run results/runs/<run>
-   ```
+body_parts = []
 
-   The report builder exports markdown documents summarising the
-   model structure, calibration metrics and scenario outcomes.  The
-   interactive dashboard (built on Dash) lets you overlay
-   simulations with experimental means ± SEM, explore parameter
-   ensembles and run custom in silico perturbations.
+for assay, df in body.groupby("assay", dropna=False):
+    df = df.copy()
 
-## Model assumptions and limitations
+    if assay in minute_assays:
+        df = df[df["time"] <= 120.0]
+        df["time"] = df["time"] / 60.0
+    elif assay in fasting_assays:
+        df = df[df["time"] <= 24.0]
+    else:
+        df = df[df["time"] <= 120.0]
 
-- **Phenomenological rate laws:**  The ODE system captures only the
-  main processes required to reproduce the tolerance tests (e.g.,
-  glucose appearance, insulin‐dependent clearance, hepatic
-  gluconeogenesis and basic ketogenesis).  It is not a detailed
-  reconstruction of glycolysis, gluconeogenesis or the full TCA
-  cycle.
-- **Shared base parameters:**  Wild type and knockout animals share
-  most kinetic constants, with genotype‐specific multipliers (e.g.,
-  `theta_KO_gng`) used to represent Sucnr1 deletion.  This design
-  prevents overfitting separate models to each genotype.
-- **Data constraints:**  Only a subset of the supplementary tables
-  provide time–series measurements; the remainder are treated as
-  qualitative or auxiliary constraints.  The calibration routine
-  currently fits to GTT, ITT, PTT, fasting glucose and ketones.  OCR
-  and ECAR data are parsed and exposed, but full joint fitting to
-  Seahorse traces is left as future work.
-- **Identifiability:**  Even simple models can be poorly
-  identifiable.  Use the ranked ensemble of solutions rather than
-  trusting a single parameter set.  Confidence intervals are
-  approximate and do not capture structural uncertainties.
-- **Parsing heuristics:**  The data ingestor uses heuristics to
-  interpret the complex Excel layouts.  Column names, genotype
-  labels and replicate indices are inferred from the header rows.  If
-  a sheet deviates from the expected structure, a warning is logged
-  and the records are skipped.
+    body_parts.append(df)
+
+body = pd.concat(body_parts, ignore_index=True)
+
+sea = sea[sea["time"] <= 180.0].copy()
+sea["time"] = sea["time"] / 60.0
+
+body.to_csv(p / "dynamic_body.csv", index=False)
+sea.to_csv(p / "dynamic_seahorse.csv", index=False)
+pd.concat([body, sea], ignore_index=True).to_csv(p / "all_tidy.csv", index=False)
+
+for path in [
+    p / "dynamic_body.csv",
+    p / "dynamic_seahorse.csv",
+    p / "all_tidy.csv",
+]:
+    df = pd.read_csv(path)
+    print("\n", path)
+    print(df.groupby("assay")["time"].agg(["min", "max", "nunique"]).to_string())
+PY
+```
+
+Expected maximum times after cleaning:
+
+```text
+GTT / ITT / PTT: approximately 2.0 hours
+fasting_glucose / fasting_ketone: 24.0 hours
+Seahorse assays: approximately 1.5-2.1 hours
+```
+
+### 2. Build SBML models
+
+Build the plasma/body model:
+
+```bash
+sucnr1-build body \
+  --config configs/model_body.yaml \
+  --out results/models/body.xml
+```
+
+Build the liver model:
+
+```bash
+sucnr1-build liver \
+  --config configs/model_liver.yaml \
+  --out results/models/liver.xml
+```
+
+Build the coupled body-liver model:
+
+```bash
+sucnr1-build combined \
+  --body-config configs/model_body.yaml \
+  --liver-config configs/model_liver.yaml \
+  --config configs/model_combined.yaml \
+  --out results/models/body_liver.xml
+```
+
+If the installed CLI exposes the older combined-model interface, use:
+
+```bash
+sucnr1-build combined \
+  --config configs/model_combined.yaml \
+  --out results/models/body_liver.xml
+```
+
+Validate the generated models:
+
+```bash
+python - <<'PY'
+import libsbml
+
+for path in [
+    "results/models/body.xml",
+    "results/models/liver.xml",
+    "results/models/body_liver.xml",
+]:
+    print("\n", path)
+    doc = libsbml.readSBML(path)
+    n = doc.checkConsistency()
+    print("messages:", n)
+
+    for i in range(n):
+        e = doc.getError(i)
+        if e.getSeverity() >= libsbml.LIBSBML_SEV_WARNING:
+            print("severity", e.getSeverity(), "-", e.getMessage().splitlines()[0])
+PY
+```
+
+### 3. Run pre-fit simulations
+
+Before fitting, confirm that the models are dynamic and not structurally flat:
+
+```bash
+python scripts/simulate_plot_all_models.py \
+  --start 0 \
+  --end 24 \
+  --num 240 \
+  --out results/simulations/prefit
+```
+
+This writes one CSV per model and diagnostic plots under:
+
+```text
+results/simulations/prefit/
+```
+
+### 4. Fit body, liver and combined models
+
+Remove stale fits before recalibration:
+
+```bash
+rm -rf results/runs/body_fit results/runs/liver_fit results/runs/combined_fit
+```
+
+Fit the body model to body dynamic assays:
+
+```bash
+sucnr1-fit \
+  --data results/processed \
+  --model results/models/body.xml \
+  --config configs/fit_body.yaml \
+  --out results/runs/body_fit/fit \
+  --n-starts 10
+```
+
+Fit the liver model to Seahorse assays:
+
+```bash
+sucnr1-fit \
+  --data results/processed \
+  --model results/models/liver.xml \
+  --config configs/fit_liver.yaml \
+  --out results/runs/liver_fit/fit \
+  --n-starts 10
+```
+
+Fit the combined model to all processed dynamic assays:
+
+```bash
+sucnr1-fit \
+  --data results/processed \
+  --model results/models/body_liver.xml \
+  --config configs/fit_combined.yaml \
+  --out results/runs/combined_fit/fit \
+  --n-starts 10
+```
+
+Inspect ranked multistart losses:
+
+```bash
+cat results/runs/body_fit/fit/ranked_multistart.csv
+cat results/runs/liver_fit/fit/ranked_multistart.csv
+cat results/runs/combined_fit/fit/ranked_multistart.csv
+```
+
+Inspect best-fit parameters:
+
+```bash
+cat results/runs/body_fit/fit/best_parameters.csv
+cat results/runs/liver_fit/fit/best_parameters.csv
+cat results/runs/combined_fit/fit/best_parameters.csv
+```
+
+### 5. Plot fit diagnostics
+
+Generate body fit plots:
+
+```bash
+sucnr1-plot fit \
+  --fit-dir results/runs/body_fit/fit \
+  --data results/processed \
+  --model results/models/body.xml \
+  --config configs/fit_body.yaml \
+  --out results/figures/body_fit
+```
+
+Generate liver fit plots:
+
+```bash
+sucnr1-plot fit \
+  --fit-dir results/runs/liver_fit/fit \
+  --data results/processed \
+  --model results/models/liver.xml \
+  --config configs/fit_liver.yaml \
+  --out results/figures/liver_fit
+```
+
+Generate combined fit plots:
+
+```bash
+sucnr1-plot fit \
+  --fit-dir results/runs/combined_fit/fit \
+  --data results/processed \
+  --model results/models/body_liver.xml \
+  --config configs/fit_combined.yaml \
+  --out results/figures/combined_fit
+```
+
+List generated figures and residual tables:
+
+```bash
+find results/figures \
+  -type f \( -name "*.png" -o -name "*.csv" \) \
+  | sort
+```
+
+### 6. Run post-fit simulations
+
+Simulate all three fitted models and generate plots:
+
+```bash
+python scripts/simulate_plot_all_models.py \
+  --start 0 \
+  --end 24 \
+  --num 240 \
+  --out results/simulations/postfit
+```
+
+By default the script uses these parameter files if they exist:
+
+```text
+results/runs/body_fit/fit/best_parameters.json
+results/runs/liver_fit/fit/best_parameters.json
+results/runs/combined_fit/fit/best_parameters.json
+```
+
+If a parameter file is missing, the script falls back to the baseline values embedded in the SBML model.
+
+### 7. Run a single forward simulation from the CLI
+
+Body model:
+
+```bash
+sucnr1-sim forward \
+  --model results/models/body.xml \
+  --params results/runs/body_fit/fit/best_parameters.json \
+  --start 0 \
+  --end 24 \
+  --num 240 \
+  --selection G_mgdl,G_plasma,Pyr_plasma,AA_plasma,Ketone_plasma,Succ_plasma \
+  --out results/simulations/body_fit
+```
+
+Liver model:
+
+```bash
+sucnr1-sim forward \
+  --model results/models/liver.xml \
+  --params results/runs/liver_fit/fit/best_parameters.json \
+  --start 0 \
+  --end 24 \
+  --num 240 \
+  --selection G6P_liver,Glycogen_liver,Pyr_liver,Succ_mito,Succ_extra,Mito_capacity,OCR_proxy,ECAR_proxy,mito_OCR_proxy \
+  --out results/simulations/liver_fit
+```
+
+Combined model:
+
+```bash
+sucnr1-sim forward \
+  --model results/models/body_liver.xml \
+  --params results/runs/combined_fit/fit/best_parameters.json \
+  --start 0 \
+  --end 24 \
+  --num 240 \
+  --selection G_mgdl,G_plasma,Pyr_plasma,AA_plasma,Ketone_plasma,Succ_plasma,G6P_liver,Glycogen_liver,Pyr_liver,Succ_mito,Succ_extra,Mito_capacity,OCR_proxy,ECAR_proxy,mito_OCR_proxy \
+  --out results/simulations/combined_fit
+```
+
+### 8. Run scenario simulations
+
+The scenario engine applies multiplicative parameter perturbations from `configs/scenarios.yaml`.
+
+Create a run directory layout expected by the scenario command:
+
+```bash
+mkdir -p results/runs/combined_fit/models
+cp results/models/body_liver.xml results/runs/combined_fit/models/body_liver.xml
+```
+
+Run scenarios with the combined fitted model:
+
+```bash
+sucnr1-scenarios \
+  --run-dir results/runs/combined_fit \
+  --config configs/scenarios.yaml \
+  --out results/scenarios/combined_fit
+```
+
+If the installed CLI exposes a `run` subcommand, use:
+
+```bash
+sucnr1-scenarios run \
+  --run results/runs/combined_fit \
+  --config configs/scenarios.yaml \
+  --out results/scenarios/combined_fit
+```
+
+Inspect scenario outputs:
+
+```bash
+find results/scenarios/combined_fit \
+  -type f \( -name "*.csv" -o -name "*.png" \) \
+  | sort
+```
+
+### 9. Current modeling limitation
+
+The SBML models and fit commands are valid, but the present calibration still treats GTT, ITT, PTT, KO, siRNA, agonist and antagonist assays mostly as baseline simulations unless protocol-specific perturbation logic has been added to the objective and plotting code.
+
+The next modeling improvement should be to apply assay-specific protocols during fitting and plotting:
+
+```text
+GTT -> glucose challenge / raised G_plasma
+ITT -> insulin action pulse / raised I_eff
+PTT -> pyruvate challenge / raised Pyr_plasma
+SUCNR1 KO or siRNA -> reduced genotype_sucnr1
+agonist -> increased Succ_extra or SUCNR1_activity
+antagonist -> reduced SUCNR1_activity
+```
+
+--- 
 
 ## License
 
 This project is provided under the MIT license.  See the `LICENSE`
 file for details.
+
+---

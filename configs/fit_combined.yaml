@@ -1,49 +1,165 @@
 dataset: all_tidy
-
 parameters:
-  # Observable scale parameters are log10-fitted.
-  # 10^1.25 ~= 17.8, close to mmol/L glucose -> mg/dL conversion.
-  glucose_mgdl_scale: {guess: 1.25, bounds: [0.5, 2.0]}
-  ocr_scale: {guess: 2.5, bounds: [0, 4]}
-  ecar_scale: {guess: 1.5, bounds: [0, 4]}
-  mito_ocr_scale: {guess: 2.7, bounds: [0, 4]}
-
-  # Body glucose / insulin / pyruvate module
-  k_export_glucose: {guess: -1.3, bounds: [-4, 1]}
-  k_hgp_base: {guess: -2.0, bounds: [-4, 0]}
-  k_hgp_pyr: {guess: -2.0, bounds: [-4, 0]}
-  k_hgp_aa: {guess: -2.0, bounds: [-4, 0]}
-  k_clear_base: {guess: -2.0, bounds: [-4, 0]}
-  k_clear_ins: {guess: -1.0, bounds: [-4, 0]}
-  k_I_decay: {guess: -1.0, bounds: [-4, 0]}
-  k_pyr_uptake: {guess: -1.0, bounds: [-4, 0]}
-  k_pyr_clear: {guess: -2.0, bounds: [-4, 0]}
-
-  # Amino-acid / ketone / succinate body module
-  k_AA_release_fasting: {guess: -1.5, bounds: [-4, 0]}
-  k_AA_liver_uptake: {guess: -1.0, bounds: [-4, 0]}
-  k_ketogenesis: {guess: -1.3, bounds: [-4, 0]}
-  k_ketone_clearance: {guess: -1.0, bounds: [-4, 0]}
-  k_succ_appearance: {guess: -2.0, bounds: [-4, 0]}
-  k_succ_clear: {guess: -1.0, bounds: [-4, 0]}
-
-  # Liver carbohydrate / mitochondrial module
-  k_glucose_uptake: {guess: -1.0, bounds: [-4, 0]}
-  k_glycogen_synthesis: {guess: -1.5, bounds: [-4, 0]}
-  k_glycogenolysis: {guess: -2.0, bounds: [-4, 0]}
-  k_glycolysis: {guess: -1.0, bounds: [-4, 0]}
-  k_gng_pyr: {guess: -1.0, bounds: [-4, 0]}
-  k_gng_aa: {guess: -1.0, bounds: [-4, 0]}
-  k_TCA_glucose: {guess: -1.0, bounds: [-4, 0]}
-  k_gln_anaplerosis: {guess: -1.0, bounds: [-4, 0]}
-  k_lactate_export: {guess: -1.0, bounds: [-4, 0]}
-
-  # Liver succinate / SUCNR1 / OCR module
-  k_succ_export: {guess: -1.0, bounds: [-4, 0]}
-  k_mito_adapt: {guess: -1.0, bounds: [-4, 0]}
-  K_sucnr1: {guess: -1.0, bounds: [-4, 1]}
-  mito_sucnr1_gain: {guess: 0.0, bounds: [-2, 2]}
-
+  glucose_mgdl_scale:
+    guess: 1.25
+    bounds:
+    - 0.5
+    - 2.0
+  ocr_scale:
+    guess: 2.5
+    bounds:
+    - 0
+    - 4
+  ecar_scale:
+    guess: 1.5
+    bounds:
+    - 0
+    - 4
+  mito_ocr_scale:
+    guess: 2.7
+    bounds:
+    - 0
+    - 4
+  k_export_glucose:
+    guess: -1.3
+    bounds:
+    - -4
+    - 1
+  k_hgp_base:
+    guess: -2.0
+    bounds:
+    - -4
+    - 0
+  k_hgp_pyr:
+    guess: -2.0
+    bounds:
+    - -4
+    - 0
+  k_hgp_aa:
+    guess: -2.0
+    bounds:
+    - -4
+    - 0
+  k_clear_base:
+    guess: -2.0
+    bounds:
+    - -4
+    - 0
+  k_clear_ins:
+    guess: -1.0
+    bounds:
+    - -4
+    - 0
+  k_I_decay:
+    guess: -1.0
+    bounds:
+    - -4
+    - 0
+  k_pyr_uptake:
+    guess: -1.0
+    bounds:
+    - -4
+    - 0
+  k_pyr_clear:
+    guess: -2.0
+    bounds:
+    - -4
+    - 0
+  k_AA_release_fasting:
+    guess: -1.5
+    bounds:
+    - -4
+    - 0
+  k_AA_liver_uptake:
+    guess: -1.0
+    bounds:
+    - -4
+    - 0
+  k_ketogenesis:
+    guess: -1.3
+    bounds:
+    - -4
+    - 0
+  k_ketone_clearance:
+    guess: -1.0
+    bounds:
+    - -4
+    - 0
+  k_succ_appearance:
+    guess: -2.0
+    bounds:
+    - -4
+    - 0
+  k_succ_clear:
+    guess: -1.0
+    bounds:
+    - -4
+    - 0
+  k_glucose_uptake:
+    guess: -1.0
+    bounds:
+    - -4
+    - 0
+  k_glycogen_synthesis:
+    guess: -1.5
+    bounds:
+    - -4
+    - 0
+  k_glycogenolysis:
+    guess: -2.0
+    bounds:
+    - -4
+    - 0
+  k_glycolysis:
+    guess: -1.0
+    bounds:
+    - -4
+    - 0
+  k_gng_pyr:
+    guess: -1.0
+    bounds:
+    - -4
+    - 0
+  k_gng_aa:
+    guess: -1.0
+    bounds:
+    - -4
+    - 0
+  k_TCA_glucose:
+    guess: -1.0
+    bounds:
+    - -4
+    - 0
+  k_gln_anaplerosis:
+    guess: -1.0
+    bounds:
+    - -4
+    - 0
+  k_lactate_export:
+    guess: -1.0
+    bounds:
+    - -4
+    - 0
+  k_succ_export:
+    guess: -1.0
+    bounds:
+    - -4
+    - 0
+  k_mito_adapt:
+    guess: -1.0
+    bounds:
+    - -4
+    - 0
+  K_sucnr1:
+    guess: -1.0
+    bounds:
+    - -4
+    - 1
+  mito_sucnr1_gain:
+    guess: 0.0
+    bounds:
+    - -2
+    - 2
 observables:
   GTT: G_mgdl
   GTT_female: G_mgdl
@@ -53,18 +169,15 @@ observables:
   PTT_female: G_mgdl
   fasting_glucose: G_mgdl
   fasting_ketone: Ketone_plasma
-
   OCR_WT_vs_global_KO: OCR_proxy
   OCR_antagonist_agonist: OCR_proxy
   OCR_liver_KO: OCR_proxy
   OCR_siRNA: OCR_proxy
   mito_OCR: mito_OCR_proxy
-
   ECAR_WT_vs_global_KO: ECAR_proxy
   ECAR_antagonist_agonist: ECAR_proxy
   ECAR_liver_KO: ECAR_proxy
   ECAR_siRNA: ECAR_proxy
-
 weights:
   GTT: 1.0
   GTT_female: 1.0
@@ -74,18 +187,15 @@ weights:
   PTT_female: 1.0
   fasting_glucose: 0.5
   fasting_ketone: 0.5
-
   OCR_WT_vs_global_KO: 1.0
   OCR_antagonist_agonist: 1.0
   OCR_liver_KO: 1.0
   OCR_siRNA: 1.0
   mito_OCR: 1.0
-
   ECAR_WT_vs_global_KO: 1.0
   ECAR_antagonist_agonist: 1.0
   ECAR_liver_KO: 1.0
   ECAR_siRNA: 1.0
-
 optimiser:
   max_iter: 10000
   n_starts: 10

@@ -38,6 +38,32 @@ weights:
   fasting_ketone: 0.5
 
 optimiser:
-  max_iter: 10000
+  method: hybrid_de_l_bfgs_b
+  local_method: L-BFGS-B
+  loss: soft_l1
+  f_scale: 1.0
+  global_max_iter: 80
+  popsize: 8
+  max_iter: 2000
+  polish: true
   n_starts: 10
   random_seed: 42
+
+#optimiser:
+#  method: L-BFGS-B
+#  loss: soft_l1
+#  f_scale: 1.0
+#  max_iter: 2000
+#  n_starts: 10
+#  random_seed: 42
+#
+#optimiser:
+#  method: hybrid_da_l_bfgs_b
+#  local_method: L-BFGS-B
+#  loss: soft_l1
+#  f_scale: 1.0
+#  global_max_iter: 300
+#  max_iter: 2000
+#  polish: true
+#  n_starts: 5
+#  random_seed: 42
