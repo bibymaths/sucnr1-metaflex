@@ -31,6 +31,8 @@ species:
     initial_concentration: 0.0
     units: millimole_per_litre
 parameters:
+  glucose_mgdl_scale: 18.0182
+  I_eff_ref: 1.0
   k_export_glucose: 0.05
   k_hgp_base: 0.01
   k_hgp_pyr: 0.05
@@ -39,13 +41,12 @@ parameters:
   k_clear_ins: 0.05
   k_pyr_uptake: 0.1
   k_pyr_clear: 0.01
-  k_AA_release_fasting: 0.0
+  k_AA_release_fasting: 0.03
   k_AA_liver_uptake: 0.05
-  k_ketogenesis: 0.01
-  k_ketone_clearance: 0.05
-  k_succ_appearance: 0.0
+  k_ketogenesis: 0.05
+  k_ketone_clearance: 0.1
+  k_succ_appearance: 0.01
   k_succ_clear: 0.01
 assignment_rules:
-  # Example: effective insulin activity decays exponentially
-  # I_eff' = u_insulin_itt(t) - k_I_decay * I_eff
   k_I_decay: 0.1
+  G_mgdl: glucose_mgdl_scale * G_plasma

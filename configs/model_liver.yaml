@@ -37,6 +37,7 @@ species:
     initial_concentration: 1.0
     units: dimensionless
 parameters:
+  Mito_capacity_ref: 1.0
   k_glucose_uptake: 0.05
   k_glycogen_synthesis: 0.02
   k_glycogenolysis: 0.01
@@ -50,10 +51,18 @@ parameters:
   k_succ_clear: 0.01
   k_mito_adapt: 0.01
   mito_target: 1.0
+  mito_sucnr1_gain: 1.0
+  mito_sucnr1_baseline: 1.0
   # SUCNR1 activity scale multiplies succinate activation
   K_sucnr1: 1.0
   # Genotype multipliers (1 for WT, <1 for KO)
   genotype_sucnr1: 1.0
+  ocr_scale: 300.0
+  ecar_scale: 100.0
+  mito_ocr_scale: 500.0
 assignment_rules:
   # Phenomenological SUCNR1 activity: genotype multiplier times succinate
   SUCNR1_activity: genotype_sucnr1 * Succ_extra / (K_sucnr1 + Succ_extra)
+  OCR_proxy: ocr_scale * Mito_capacity
+  ECAR_proxy: ecar_scale * Pyr_liver
+  mito_OCR_proxy: mito_ocr_scale * Mito_capacity

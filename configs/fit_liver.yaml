@@ -1,6 +1,9 @@
 dataset: dynamic_seahorse
 
 parameters:
+  ocr_scale: {guess: 2.5, bounds: [0, 4]}
+  ecar_scale: {guess: 1.5, bounds: [0, 4]}
+  mito_ocr_scale: {guess: 2.7, bounds: [0, 4]}
   k_glucose_uptake: {guess: -1.0, bounds: [-4, 0]}
   k_glycogen_synthesis: {guess: -1.5, bounds: [-4, 0]}
   k_glycogenolysis: {guess: -2.0, bounds: [-4, 0]}
@@ -14,17 +17,19 @@ parameters:
   k_succ_clear: {guess: -1.0, bounds: [-4, 0]}
   k_mito_adapt: {guess: -1.0, bounds: [-4, 0]}
   K_sucnr1: {guess: -1.0, bounds: [-4, 1]}
+  mito_sucnr1_baseline: 1.0
+  mito_sucnr1_gain: 1.0
 
 observables:
-  OCR_WT_vs_global_KO: Mito_capacity
-  OCR_antagonist_agonist: Mito_capacity
-  OCR_liver_KO: Mito_capacity
-  OCR_siRNA: Mito_capacity
-  mito_OCR: Mito_capacity
-  ECAR_WT_vs_global_KO: Pyr_liver
-  ECAR_antagonist_agonist: Pyr_liver
-  ECAR_liver_KO: Pyr_liver
-  ECAR_siRNA: Pyr_liver
+  OCR_WT_vs_global_KO: OCR_proxy
+  OCR_antagonist_agonist: OCR_proxy
+  OCR_liver_KO: OCR_proxy
+  OCR_siRNA: OCR_proxy
+  mito_OCR: mito_OCR_proxy
+  ECAR_WT_vs_global_KO: ECAR_proxy
+  ECAR_antagonist_agonist: ECAR_proxy
+  ECAR_liver_KO: ECAR_proxy
+  ECAR_siRNA: ECAR_proxy
 
 weights:
   OCR_WT_vs_global_KO: 1.0
@@ -38,6 +43,6 @@ weights:
   ECAR_siRNA: 1.0
 
 optimiser:
-  max_iter: 200
+  max_iter: 10000
   n_starts: 10
   random_seed: 42

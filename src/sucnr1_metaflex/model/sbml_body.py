@@ -135,13 +135,15 @@ def _create_common_units(model: "libsbml.Model") -> None:
 def _infer_parameter_units(pid: str) -> str:
     """Infer SBML parameter units from parameter names.
 
-    Important distinction:
-    - K_sucnr1, Km_sucnr1, EC50_sucnr1 are concentration constants.
-    - k_mito_adapt is a first-order adaptation/turnover rate, not a Km.
+    The model uses concentration-like species with hasOnlySubstanceUnits=False.
+    Therefore:
+    - first-order rate constants are per_hour;
+    - zero-order source rates are millimole_per_litre_per_hour;
+    - reference concentrations and proxy observables are millimole_per_litre;
+    - fitted scale factors are dimensionless.
     """
     name = str(pid).lower()
 
-    # Explicit concentration constants.
     concentration_exact = {
         "k_sucnr1",
         "km_sucnr1",
@@ -150,17 +152,38 @@ def _infer_parameter_units(pid: str) -> str:
         "k_d_sucnr1",
         "ec50_sucnr1",
         "ic50_sucnr1",
+        "i_eff_ref",
+        "mito_target",
+        "mito_capacity_ref",
+        "g_mgdl",
+        "ocr_proxy",
+        "ecar_proxy",
+        "mito_ocr_proxy",
     }
 
     if name in concentration_exact:
         return "millimole_per_litre"
 
-    # Do not let k_mito_* be mistaken for K_m.
-    if name.startswith("k_mito"):
+    if name in {"k_hgp_base", "k_aa_release_fasting", "k_succ_appearance"}:
+        return "millimole_per_litre_per_hour"
+
+    if name in {"k_hgp_pyr", "k_hgp_aa"}:
         return "per_hour"
 
-    # Conservative concentration-constant patterns.
-    # These catch Km/Kd/EC50/IC50-style names without matching k_mito.
+    dimensionless_exact = {
+        "glucose_mgdl_scale",
+        "ocr_scale",
+        "ecar_scale",
+        "mito_ocr_scale",
+        "genotype_sucnr1",
+        "sucnr1_activity",
+        "mito_sucnr1_baseline",
+        "mito_sucnr1_gain",
+    }
+
+    if name in dimensionless_exact:
+        return "dimensionless"
+
     concentration_prefixes = (
         "km_",
         "kd_",
@@ -196,19 +219,42 @@ def _infer_parameter_units(pid: str) -> str:
         "beta",
         "gamma",
         "hill",
+        "gain",
     )
 
+    if any(tok in name for tok in dimensionless_tokens):
+        return "dimensionless"
+
+    # Zero-order source/appearance/input rates.
+    # Used in formulas such as: k_hgp_base * plasma
+    # Units: concentration / time.
+    flux_exact = {
+        "k_hgp_base",
+        "k_hgp_pyr",
+        "k_hgp_aa",
+        "k_aa_release_fasting",
+        "k_succ_appearance",
+        "k_gln_anaplerosis",
+    }
+
+    if name in flux_exact:
+        return "millimole_per_litre_per_hour"
+
     flux_tokens = (
-        "hgp",
         "appearance",
         "release",
         "production",
         "secretion",
-        "ketogenesis",
         "input",
         "source",
+        "anaplerosis",
     )
 
+    if name.startswith("k_") and any(tok in name for tok in flux_tokens):
+        return "millimole_per_litre_per_hour"
+
+    # First-order rates multiplying a concentration-like state.
+    # Used in formulas such as: k * species * compartment.
     first_order_tokens = (
         "clear",
         "clearance",
@@ -218,17 +264,16 @@ def _infer_parameter_units(pid: str) -> str:
         "import",
         "transport",
         "glycogenolysis",
+        "glycogen_synthesis",
+        "synthesis",
+        "glycolysis",
+        "ketogenesis",
         "tca",
+        "gng",
         "adapt",
         "turnover",
         "degradation",
     )
-
-    if any(tok in name for tok in dimensionless_tokens):
-        return "dimensionless"
-
-    if name.startswith("k_") and any(tok in name for tok in flux_tokens):
-        return "millimole_per_litre_per_hour"
 
     if name.startswith("k_") and any(tok in name for tok in first_order_tokens):
         return "per_hour"
@@ -323,45 +368,140 @@ def _create_reactions(
     species: Dict[str, Dict[str, Any]],
     parameters: Dict[str, Any],
 ) -> None:
-    """Define first-order clearance reactions.
+    """Create minimal dynamic body reactions.
 
-    SBML KineticLaw expressions must have units of substance/time.
-    Since state variables are represented as concentrations, the
-    concentration-based first-order flux k * S must be multiplied by
-    the compartment volume: k * S * compartment.
+    This replaces the previous sink-only system with production,
+    clearance, and simple conversion reactions.
     """
-    clearance_map = {
-        "G_plasma": "k_clear_base",
-        "I_eff": "k_I_decay",
-        "Pyr_plasma": "k_pyr_clear",
-        "AA_plasma": "k_AA_liver_uptake",
-        "Ketone_plasma": "k_ketone_clearance",
-        "Succ_plasma": "k_succ_clear",
-    }
 
-    for sid, attrs in species.items():
-        param_id = clearance_map.get(sid)
-        if not param_id:
-            continue
+    def add_reaction(
+            rid: str,
+            reactants: list[str],
+            products: list[str],
+            formula: str,
+            modifiers: list[str] | None = None,
+    ) -> None:
+        if model.getReaction(rid) is not None:
+            return
 
-        compartment_id = attrs.get("compartment")
-        if compartment_id is None:
-            raise ValueError(f"Species {sid} missing compartment")
+        modifiers = modifiers or []
 
         reaction = model.createReaction()
-        reaction.setId(f"decay_{sid}")
+        reaction.setId(rid)
         reaction.setReversible(False)
         reaction.setFast(False)
 
-        reactant = reaction.createReactant()
-        reactant.setSpecies(sid)
-        reactant.setStoichiometry(1.0)
-        reactant.setConstant(True)
+        for sid in reactants:
+            sr = reaction.createReactant()
+            sr.setSpecies(sid)
+            sr.setStoichiometry(1.0)
+            sr.setConstant(True)
+
+        for sid in products:
+            sr = reaction.createProduct()
+            sr.setSpecies(sid)
+            sr.setStoichiometry(1.0)
+            sr.setConstant(True)
+
+        already_declared = set(reactants) | set(products)
+
+        for sid in modifiers:
+            if sid in already_declared:
+                continue
+            msr = reaction.createModifier()
+            msr.setSpecies(sid)
 
         kl = reaction.createKineticLaw()
-        math_ast = libsbml.parseL3Formula(f"{param_id} * {sid} * {compartment_id}")
-        kl.setMath(math_ast)
+        kl.setMath(libsbml.parseL3Formula(formula))
 
+    plasma = "plasma"
+
+    # Hepatic glucose production / appearance into plasma.
+    add_reaction(
+        "source_G_plasma_hgp",
+        [],
+        ["G_plasma"],
+        f"(k_hgp_base + k_hgp_pyr * Pyr_plasma + k_hgp_aa * AA_plasma) * {plasma}",
+        modifiers=["Pyr_plasma", "AA_plasma"],
+    )
+
+    # Glucose clearance, insulin-enhanced.
+    add_reaction(
+        "clear_G_plasma",
+        ["G_plasma"],
+        [],
+        f"(k_clear_base + k_clear_ins * (I_eff / I_eff_ref)) * G_plasma * {plasma}",
+        modifiers=["I_eff"],
+    )
+
+    # Insulin action decay.
+    add_reaction(
+        "decay_I_eff",
+        ["I_eff"],
+        [],
+        f"k_I_decay * I_eff * {plasma}",
+    )
+
+    # Basal pyruvate appearance and clearance.
+    add_reaction(
+        "source_Pyr_plasma",
+        [],
+        ["Pyr_plasma"],
+        f"k_pyr_uptake * G_plasma * {plasma}",
+        modifiers=["G_plasma"],
+    )
+
+    add_reaction(
+        "clear_Pyr_plasma",
+        ["Pyr_plasma"],
+        [],
+        f"k_pyr_clear * Pyr_plasma * {plasma}",
+    )
+
+    # Fasting amino-acid appearance and hepatic uptake.
+    add_reaction(
+        "source_AA_plasma",
+        [],
+        ["AA_plasma"],
+        f"k_AA_release_fasting * {plasma}",
+    )
+
+    add_reaction(
+        "clear_AA_plasma",
+        ["AA_plasma"],
+        [],
+        f"k_AA_liver_uptake * AA_plasma * {plasma}",
+    )
+
+    # Ketogenesis from amino-acid substrate pool and ketone clearance.
+    add_reaction(
+        "ketogenesis_from_AA",
+        ["AA_plasma"],
+        ["Ketone_plasma"],
+        f"k_ketogenesis * AA_plasma * {plasma}",
+    )
+
+    add_reaction(
+        "clear_Ketone_plasma",
+        ["Ketone_plasma"],
+        [],
+        f"k_ketone_clearance * Ketone_plasma * {plasma}",
+    )
+
+    # Succinate appearance and clearance.
+    add_reaction(
+        "source_Succ_plasma",
+        [],
+        ["Succ_plasma"],
+        f"k_succ_appearance * {plasma}",
+    )
+
+    add_reaction(
+        "clear_Succ_plasma",
+        ["Succ_plasma"],
+        [],
+        f"k_succ_clear * Succ_plasma * {plasma}",
+    )
 
 def _create_assignment_rules(model: libsbml.Model, assignment_rules: Dict[str, Any]) -> None:
     """Create assignment rules for parameters in the model.

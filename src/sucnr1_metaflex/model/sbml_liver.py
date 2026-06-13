@@ -136,48 +136,135 @@ def _create_reactions(
     species: Dict[str, Dict[str, Any]],
     parameters: Dict[str, Any],
 ) -> None:
-    """Create first-order sink reactions with SBML-valid amount/time units.
+    """Create minimal liver metabolic network reactions.
 
-    Since species are represented with initialConcentration and
-    hasOnlySubstanceUnits=False, a species symbol in a kinetic law has
-    concentration units. Therefore k * species must be multiplied by
-    the species compartment to produce amount/time.
+    This replaces the previous decay-only model with reversible-ish
+    pathway structure, succinate export, and mitochondrial adaptation.
     """
-    clearance_map = {
-        "G6P_liver": "k_glucose_uptake",
-        "Glycogen_liver": "k_glycogenolysis",
-        "Pyr_liver": "k_TCA_glucose",
-        "Succ_mito": "k_succ_export",
-        "Succ_extra": "k_succ_clear",
-        "Mito_capacity": "k_mito_adapt",
-    }
 
-    for sid, attrs in species.items():
-        sid = str(sid)
-        param_id = clearance_map.get(sid)
-        if not param_id:
-            continue
+    def add_reaction(
+            rid: str,
+            reactants: list[str],
+            products: list[str],
+            formula: str,
+            modifiers: list[str] | None = None,
+    ) -> None:
+        if model.getReaction(rid) is not None:
+            return
 
-        compartment_id = attrs.get("compartment")
-        if compartment_id is None:
-            raise ValueError(f"Species {sid} missing compartment")
-
-        _ensure_parameter(model, param_id, float(parameters.get(param_id, 0.0)))
+        modifiers = modifiers or []
 
         reaction = model.createReaction()
-        reaction.setId(f"decay_{sid}")
+        reaction.setId(rid)
         reaction.setReversible(False)
         reaction.setFast(False)
 
-        reactant = reaction.createReactant()
-        reactant.setSpecies(sid)
-        reactant.setStoichiometry(1.0)
-        reactant.setConstant(True)
+        for sid in reactants:
+            sr = reaction.createReactant()
+            sr.setSpecies(sid)
+            sr.setStoichiometry(1.0)
+            sr.setConstant(True)
+
+        for sid in products:
+            sr = reaction.createProduct()
+            sr.setSpecies(sid)
+            sr.setStoichiometry(1.0)
+            sr.setConstant(True)
+
+        already_declared = set(reactants) | set(products)
+
+        for sid in modifiers:
+            if sid in already_declared:
+                continue
+            msr = reaction.createModifier()
+            msr.setSpecies(sid)
 
         kl = reaction.createKineticLaw()
-        formula = f"{param_id} * {sid} * {compartment_id}"
-        math_ast = libsbml.parseL3Formula(formula)
-        kl.setMath(math_ast)
+        kl.setMath(libsbml.parseL3Formula(formula))
+
+    cyt = "hepatocyte_cytosol"
+    mito = "mitochondrion"
+    ext = "extracellular_medium"
+
+    # Glycogen <-> G6P.
+    add_reaction(
+        "glycogenolysis_to_G6P",
+        ["Glycogen_liver"],
+        ["G6P_liver"],
+        f"k_glycogenolysis * Glycogen_liver * {cyt}",
+    )
+
+    add_reaction(
+        "glycogen_synthesis_from_G6P",
+        ["G6P_liver"],
+        ["Glycogen_liver"],
+        f"k_glycogen_synthesis * G6P_liver * {cyt}",
+    )
+
+    # Glycolysis and gluconeogenic return.
+    add_reaction(
+        "glycolysis_G6P_to_Pyr",
+        ["G6P_liver"],
+        ["Pyr_liver"],
+        f"k_glycolysis * G6P_liver * {cyt}",
+    )
+
+    add_reaction(
+        "gng_Pyr_to_G6P",
+        ["Pyr_liver"],
+        ["G6P_liver"],
+        f"k_gng_pyr * Pyr_liver * {cyt}",
+    )
+
+    # Glutamine/anaplerotic source into mitochondrial succinate.
+    add_reaction(
+        "gln_anaplerosis_to_Succ_mito",
+        [],
+        ["Succ_mito"],
+        f"k_gln_anaplerosis * {mito}",
+    )
+
+    # Pyruvate oxidation into mitochondrial succinate proxy.
+    add_reaction(
+        "TCA_Pyr_to_Succ_mito",
+        ["Pyr_liver"],
+        ["Succ_mito"],
+        f"k_TCA_glucose * (Mito_capacity / Mito_capacity_ref) * Pyr_liver * {cyt}",
+        modifiers=["Mito_capacity"],
+    )
+
+    # Succinate export and extracellular clearance.
+    add_reaction(
+        "export_Succ_mito_to_extra",
+        ["Succ_mito"],
+        ["Succ_extra"],
+        f"k_succ_export * Succ_mito * {mito}",
+    )
+
+    add_reaction(
+        "clear_Succ_extra",
+        ["Succ_extra"],
+        [],
+        f"k_succ_clear * Succ_extra * {ext}",
+    )
+
+    # Mitochondrial capacity relaxes toward mito_target instead of decaying to zero.
+    add_reaction(
+        "produce_Mito_capacity",
+        [],
+        ["Mito_capacity"],
+        (
+            f"k_mito_adapt * mito_target * "
+            f"(mito_sucnr1_baseline + mito_sucnr1_gain * SUCNR1_activity) * {mito}"
+        ),
+    )
+
+    add_reaction(
+        "decay_Mito_capacity",
+        ["Mito_capacity"],
+        [],
+        f"k_mito_adapt * Mito_capacity * {mito}",
+    )
 
 
 def build_liver_model(config_path: str) -> libsbml.SBMLDocument:

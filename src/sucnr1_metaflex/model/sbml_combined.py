@@ -50,20 +50,34 @@ def _copy_unit_definitions(source_model: libsbml.Model, dest_model: libsbml.Mode
         copied = unit_def.clone() if hasattr(unit_def, "clone") else unit_def.deepCopy()
         dest_model.addUnitDefinition(copied)
 
-
 def _copy_components(source_model: libsbml.Model, dest_model: libsbml.Model) -> None:
-    """Copy compartments, species, parameters, rules and reactions."""
+    """Copy compartments, species, parameters, assignment rules and reactions.
+
+    Important:
+    Modifier species references must be copied. Otherwise reactions whose
+    kinetic laws use non-consumed species, for example I_eff, G_plasma or
+    Mito_capacity, become invalid in the combined model.
+    """
     _copy_unit_definitions(source_model, dest_model)
 
+    # Compartments
     for i in range(source_model.getNumCompartments()):
         comp = source_model.getCompartment(i)
+        comp_id = comp.getId()
 
-        if dest_model.getCompartment(comp.getId()) is not None:
+        if dest_model.getCompartment(comp_id) is not None:
             continue
 
         new_comp = dest_model.createCompartment()
-        new_comp.setId(comp.getId())
-        new_comp.setConstant(comp.getConstant())
+        new_comp.setId(comp_id)
+
+        if comp.isSetName():
+            new_comp.setName(comp.getName())
+
+        if comp.isSetConstant():
+            new_comp.setConstant(comp.getConstant())
+        else:
+            new_comp.setConstant(True)
 
         if comp.isSetSize():
             new_comp.setSize(comp.getSize())
@@ -71,14 +85,23 @@ def _copy_components(source_model: libsbml.Model, dest_model: libsbml.Model) -> 
         if comp.isSetUnits():
             new_comp.setUnits(comp.getUnits())
 
+        if comp.isSetSpatialDimensions():
+            new_comp.setSpatialDimensions(comp.getSpatialDimensions())
+
+    # Species
     for i in range(source_model.getNumSpecies()):
         sp = source_model.getSpecies(i)
+        sid = sp.getId()
 
-        if dest_model.getSpecies(sp.getId()) is not None:
+        if dest_model.getSpecies(sid) is not None:
             continue
 
         new_sp = dest_model.createSpecies()
-        new_sp.setId(sp.getId())
+        new_sp.setId(sid)
+
+        if sp.isSetName():
+            new_sp.setName(sp.getName())
+
         new_sp.setCompartment(sp.getCompartment())
 
         if sp.isSetInitialConcentration():
@@ -93,25 +116,37 @@ def _copy_components(source_model: libsbml.Model, dest_model: libsbml.Model) -> 
         if sp.isSetSubstanceUnits():
             new_sp.setSubstanceUnits(sp.getSubstanceUnits())
 
+        if sp.isSetConversionFactor():
+            new_sp.setConversionFactor(sp.getConversionFactor())
+
+    # Parameters
     for i in range(source_model.getNumParameters()):
         par = source_model.getParameter(i)
+        pid = par.getId()
 
-        if dest_model.getParameter(par.getId()) is not None:
+        if dest_model.getParameter(pid) is not None:
             continue
 
         new_par = dest_model.createParameter()
-        new_par.setId(par.getId())
+        new_par.setId(pid)
+
+        if par.isSetName():
+            new_par.setName(par.getName())
 
         if par.isSetValue():
             new_par.setValue(par.getValue())
 
-        new_par.setConstant(par.getConstant())
+        if par.isSetConstant():
+            new_par.setConstant(par.getConstant())
+        else:
+            new_par.setConstant(False)
 
         if par.isSetUnits():
             new_par.setUnits(par.getUnits())
         else:
-            new_par.setUnits(_infer_parameter_units(par.getId()))
+            new_par.setUnits(_infer_parameter_units(pid))
 
+    # Assignment rules
     for i in range(source_model.getNumRules()):
         rule = source_model.getRule(i)
 
@@ -127,14 +162,20 @@ def _copy_components(source_model: libsbml.Model, dest_model: libsbml.Model) -> 
         new_rule.setVariable(variable)
         new_rule.setMath(_copy_math(rule.getMath()))
 
+    # Reactions
     for i in range(source_model.getNumReactions()):
         reaction = source_model.getReaction(i)
+        rid = reaction.getId()
 
-        if dest_model.getReaction(reaction.getId()) is not None:
+        if dest_model.getReaction(rid) is not None:
             continue
 
         new_reaction = dest_model.createReaction()
-        new_reaction.setId(reaction.getId())
+        new_reaction.setId(rid)
+
+        if reaction.isSetName():
+            new_reaction.setName(reaction.getName())
+
         new_reaction.setReversible(reaction.getReversible())
 
         if reaction.isSetFast():
@@ -142,9 +183,17 @@ def _copy_components(source_model: libsbml.Model, dest_model: libsbml.Model) -> 
         else:
             new_reaction.setFast(False)
 
+        # Reactants
         for j in range(reaction.getNumReactants()):
             reactant = reaction.getReactant(j)
             new_reactant = new_reaction.createReactant()
+
+            if reactant.isSetId():
+                new_reactant.setId(reactant.getId())
+
+            if reactant.isSetName():
+                new_reactant.setName(reactant.getName())
+
             new_reactant.setSpecies(reactant.getSpecies())
 
             if reactant.isSetStoichiometry():
@@ -152,11 +201,22 @@ def _copy_components(source_model: libsbml.Model, dest_model: libsbml.Model) -> 
             else:
                 new_reactant.setStoichiometry(1.0)
 
-            new_reactant.setConstant(reactant.getConstant())
+            if reactant.isSetConstant():
+                new_reactant.setConstant(reactant.getConstant())
+            else:
+                new_reactant.setConstant(True)
 
+        # Products
         for j in range(reaction.getNumProducts()):
             product = reaction.getProduct(j)
             new_product = new_reaction.createProduct()
+
+            if product.isSetId():
+                new_product.setId(product.getId())
+
+            if product.isSetName():
+                new_product.setName(product.getName())
+
             new_product.setSpecies(product.getSpecies())
 
             if product.isSetStoichiometry():
@@ -164,13 +224,44 @@ def _copy_components(source_model: libsbml.Model, dest_model: libsbml.Model) -> 
             else:
                 new_product.setStoichiometry(1.0)
 
-            new_product.setConstant(product.getConstant())
+            if product.isSetConstant():
+                new_product.setConstant(product.getConstant())
+            else:
+                new_product.setConstant(True)
 
+        # Modifiers: REQUIRED for kinetic-law-only species references.
+        for j in range(reaction.getNumModifiers()):
+            modifier = reaction.getModifier(j)
+            new_modifier = new_reaction.createModifier()
+
+            if modifier.isSetId():
+                new_modifier.setId(modifier.getId())
+
+            if modifier.isSetName():
+                new_modifier.setName(modifier.getName())
+
+            new_modifier.setSpecies(modifier.getSpecies())
+
+        # Kinetic law
         if reaction.isSetKineticLaw():
             kl = reaction.getKineticLaw()
             new_kl = new_reaction.createKineticLaw()
             new_kl.setMath(_copy_math(kl.getMath()))
 
+            # Copy local kinetic-law parameters if any exist.
+            for j in range(kl.getNumLocalParameters()):
+                lp = kl.getLocalParameter(j)
+                new_lp = new_kl.createLocalParameter()
+                new_lp.setId(lp.getId())
+
+                if lp.isSetName():
+                    new_lp.setName(lp.getName())
+
+                if lp.isSetValue():
+                    new_lp.setValue(lp.getValue())
+
+                if lp.isSetUnits():
+                    new_lp.setUnits(lp.getUnits())
 
 def _ensure_parameter(model: libsbml.Model, pid: str, value: float = 0.1) -> libsbml.Parameter:
     existing = model.getParameter(pid)
