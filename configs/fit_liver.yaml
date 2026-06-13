@@ -1,0 +1,43 @@
+dataset: dynamic_seahorse
+
+parameters:
+  k_glucose_uptake: {guess: -1.0, bounds: [-4, 0]}
+  k_glycogen_synthesis: {guess: -1.5, bounds: [-4, 0]}
+  k_glycogenolysis: {guess: -2.0, bounds: [-4, 0]}
+  k_gng_pyr: {guess: -1.0, bounds: [-4, 0]}
+  k_gng_aa: {guess: -1.0, bounds: [-4, 0]}
+  k_glycolysis: {guess: -1.0, bounds: [-4, 0]}
+  k_TCA_glucose: {guess: -1.0, bounds: [-4, 0]}
+  k_gln_anaplerosis: {guess: -1.0, bounds: [-4, 0]}
+  k_lactate_export: {guess: -1.0, bounds: [-4, 0]}
+  k_succ_export: {guess: -1.0, bounds: [-4, 0]}
+  k_succ_clear: {guess: -1.0, bounds: [-4, 0]}
+  k_mito_adapt: {guess: -1.0, bounds: [-4, 0]}
+  K_sucnr1: {guess: -1.0, bounds: [-4, 1]}
+
+observables:
+  OCR_WT_vs_global_KO: Mito_capacity
+  OCR_antagonist_agonist: Mito_capacity
+  OCR_liver_KO: Mito_capacity
+  OCR_siRNA: Mito_capacity
+  mito_OCR: Mito_capacity
+  ECAR_WT_vs_global_KO: Pyr_liver
+  ECAR_antagonist_agonist: Pyr_liver
+  ECAR_liver_KO: Pyr_liver
+  ECAR_siRNA: Pyr_liver
+
+weights:
+  OCR_WT_vs_global_KO: 1.0
+  OCR_antagonist_agonist: 1.0
+  OCR_liver_KO: 1.0
+  OCR_siRNA: 1.0
+  mito_OCR: 1.0
+  ECAR_WT_vs_global_KO: 1.0
+  ECAR_antagonist_agonist: 1.0
+  ECAR_liver_KO: 1.0
+  ECAR_siRNA: 1.0
+
+optimiser:
+  max_iter: 200
+  n_starts: 10
+  random_seed: 42

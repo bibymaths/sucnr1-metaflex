@@ -3,21 +3,28 @@
 from __future__ import annotations
 
 import pathlib
-from typing import Dict, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import yaml
 from pydantic import BaseModel, Field
 
 
 class ParameterDef(BaseModel):
+    """Definition of a single estimated parameter."""
+
     guess: float = Field(..., description="Log10 initial guess")
     bounds: Tuple[float, float] = Field(..., description="Log10 lower and upper bounds")
 
 
 class FitConfig(BaseModel):
+    """Full parameter-estimation configuration."""
+
+    dataset: str = "dynamic_body"
     parameters: Dict[str, ParameterDef]
     weights: Dict[str, float] = Field(default_factory=dict)
     observables: Dict[str, str] = Field(default_factory=dict)
+    include_assays: Optional[List[str]] = None
+    exclude_assays: List[str] = Field(default_factory=list)
     optimiser: Dict[str, float | int | str] = Field(default_factory=dict)
 
 
