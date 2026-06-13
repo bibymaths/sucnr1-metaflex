@@ -8,11 +8,11 @@ compartments:
 species:
   G_plasma:
     compartment: plasma
-    initial_concentration: 5.0  # mM
+    initial_concentration: 5.0
     units: millimole_per_litre
   I_eff:
     compartment: plasma
-    initial_concentration: 0.0  # dimensionless insulin action proxy
+    initial_concentration: 0.0
     units: dimensionless
   Pyr_plasma:
     compartment: plasma
@@ -34,19 +34,20 @@ parameters:
   glucose_mgdl_scale: 18.0182
   I_eff_ref: 1.0
   k_export_glucose: 0.05
-  k_hgp_base: 0.01
-  k_hgp_pyr: 0.05
-  k_hgp_aa: 0.05
-  k_clear_base: 0.01
-  k_clear_ins: 0.05
+  k_hgp_base: 0.05
+  k_hgp_pyr: 0.02
+  k_hgp_aa: 0.01
+  k_clear_base: 0.08
+  k_clear_ins: 0.5
   k_pyr_uptake: 0.1
-  k_pyr_clear: 0.01
+  k_pyr_clear: 0.1
   k_AA_release_fasting: 0.03
   k_AA_liver_uptake: 0.05
   k_ketogenesis: 0.05
   k_ketone_clearance: 0.1
-  k_succ_appearance: 0.01
-  k_succ_clear: 0.01
+  k_succ_appearance: 0.02
+  k_succ_clear: 0.1
+  k_I_decay: 1.0
 assignment_rules:
   k_I_decay: 0.1
   G_mgdl: glucose_mgdl_scale * G_plasma

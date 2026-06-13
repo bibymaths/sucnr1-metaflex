@@ -105,7 +105,36 @@ weights:
   ECAR_antagonist_agonist: 1.0
   ECAR_liver_KO: 1.0
   ECAR_siRNA: 1.0
+
+#optimiser:
+#  method: L-BFGS-B
+#  loss: soft_l1
+#  f_scale: 1.0
+#  max_iter: 3000
+#  maxfun: 3000
+#  ftol: 1.0e-9
+#  gtol: 1.0e-6
+#  maxls: 20
+#  n_starts: 10
+#  random_seed: 42
+
 optimiser:
-  max_iter: 10000
+  method: SLSQP
+  loss: soft_l1
+  f_scale: 1.0
+  max_iter: 3000
+  ftol: 1.0e-9
   n_starts: 10
   random_seed: 42
+
+#optimiser:
+#  method: trust-constr
+#  loss: soft_l1
+#  f_scale: 1.0
+#  max_iter: 1000
+#  gtol: 1.0e-6
+#  xtol: 1.0e-8
+#  barrier_tol: 1.0e-8
+#  verbose: 0
+#  n_starts: 5
+#  random_seed: 42

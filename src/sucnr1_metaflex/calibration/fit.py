@@ -1,4 +1,13 @@
-"""Parameter fitting routines using scalar SciPy optimizers."""
+"""Parameter fitting routines using local SciPy minimize optimizers.
+
+Supported optimizers:
+- L-BFGS-B
+- SLSQP
+- trust-constr
+
+The objective is scalar. Parameters are optimized in log10 space and exported
+in linear space.
+"""
 
 from __future__ import annotations
 
@@ -9,7 +18,7 @@ from typing import Any, Dict, List, Tuple
 import numpy as np
 import pandas as pd
 from loguru import logger
-from scipy.optimize import differential_evolution, dual_annealing, minimize
+from scipy.optimize import Bounds, minimize
 
 from .parameters import load_fit_config
 from .objective import compute_residuals
@@ -72,25 +81,6 @@ def _filter_assays(
     return df
 
 
-def _as_bool(value: Any, default: bool = False) -> bool:
-    if value is None:
-        return default
-
-    if isinstance(value, bool):
-        return value
-
-    if isinstance(value, (int, float)):
-        return bool(value)
-
-    text = str(value).strip().lower()
-    if text in {"1", "true", "yes", "y", "on"}:
-        return True
-    if text in {"0", "false", "no", "n", "off"}:
-        return False
-
-    return default
-
-
 def _safe_float(value: Any, default: float) -> float:
     try:
         return float(value)
@@ -103,6 +93,30 @@ def _safe_int(value: Any, default: int) -> int:
         return int(value)
     except Exception:
         return int(default)
+
+
+def _normalise_method(method: str) -> str:
+    """Map user-friendly optimizer names to scipy.optimize.minimize methods."""
+    m = str(method).strip().lower().replace("_", "-")
+
+    aliases = {
+        "lbfgs": "L-BFGS-B",
+        "lbfgsb": "L-BFGS-B",
+        "l-bfgs": "L-BFGS-B",
+        "l-bfgs-b": "L-BFGS-B",
+        "slsqp": "SLSQP",
+        "trustconstr": "trust-constr",
+        "trust-constr": "trust-constr",
+        "trust-constrained": "trust-constr",
+    }
+
+    if m not in aliases:
+        raise ValueError(
+            f"Unsupported optimizer method '{method}'. "
+            "Use one of: L-BFGS-B, SLSQP, trust-constr."
+        )
+
+    return aliases[m]
 
 
 def _robust_scalar_loss(
@@ -207,6 +221,43 @@ def _make_objective(
     return objective
 
 
+def _minimize_options(
+    method: str,
+    optimiser_cfg: Dict[str, Any],
+    max_iter: int,
+) -> Dict[str, Any]:
+    """Build method-specific scipy.minimize options."""
+    method_norm = _normalise_method(method)
+
+    if method_norm == "L-BFGS-B":
+        return {
+            "maxiter": int(max_iter),
+            "maxfun": int(optimiser_cfg.get("maxfun", max_iter)),
+            "ftol": _safe_float(optimiser_cfg.get("ftol"), 1.0e-9),
+            "gtol": _safe_float(optimiser_cfg.get("gtol"), 1.0e-6),
+            "maxls": _safe_int(optimiser_cfg.get("maxls"), 20),
+            "disp": False,
+        }
+
+    if method_norm == "SLSQP":
+        return {
+            "maxiter": int(max_iter),
+            "ftol": _safe_float(optimiser_cfg.get("ftol"), 1.0e-9),
+            "disp": False,
+        }
+
+    if method_norm == "trust-constr":
+        return {
+            "maxiter": int(max_iter),
+            "gtol": _safe_float(optimiser_cfg.get("gtol"), 1.0e-6),
+            "xtol": _safe_float(optimiser_cfg.get("xtol"), 1.0e-8),
+            "barrier_tol": _safe_float(optimiser_cfg.get("barrier_tol"), 1.0e-8),
+            "verbose": _safe_int(optimiser_cfg.get("verbose"), 0),
+        }
+
+    raise ValueError(f"Unsupported optimizer method: {method}")
+
+
 def _run_local_minimize(
     objective,
     x0: np.ndarray,
@@ -214,25 +265,30 @@ def _run_local_minimize(
     method: str,
     max_iter: int,
     tol: float | None,
+    optimiser_cfg: Dict[str, Any],
 ) -> Tuple[np.ndarray, float, Dict[str, Any]]:
-    """Run bounded local scalar optimization."""
+    """Run bounded local scalar optimization with scipy.optimize.minimize."""
+    method_norm = _normalise_method(method)
     x0 = _clip_to_bounds(x0, bounds_log)
-    bounds = [(float(lo), float(hi)) for lo, hi in bounds_log]
 
-    method_name = str(method)
+    lower = bounds_log[:, 0].astype(float)
+    upper = bounds_log[:, 1].astype(float)
 
-    options: Dict[str, Any] = {
-        "maxiter": int(max_iter),
-        "disp": False,
-    }
+    options = _minimize_options(
+        method=method_norm,
+        optimiser_cfg=optimiser_cfg,
+        max_iter=max_iter,
+    )
 
-    if method_name.upper() == "L-BFGS-B":
-        options["maxfun"] = int(max_iter)
+    if method_norm == "trust-constr":
+        bounds = Bounds(lower, upper, keep_feasible=True)
+    else:
+        bounds = [(float(lo), float(hi)) for lo, hi in zip(lower, upper)]
 
     res = minimize(
         objective,
         x0,
-        method=method_name,
+        method=method_norm,
         bounds=bounds,
         tol=tol,
         options=options,
@@ -242,86 +298,12 @@ def _run_local_minimize(
     fun = float(objective(x))
 
     meta = {
-        "optimizer": method_name,
+        "optimizer": method_norm,
         "success": bool(getattr(res, "success", False)),
         "message": str(getattr(res, "message", "")),
         "nfev": int(getattr(res, "nfev", -1)),
         "nit": int(getattr(res, "nit", -1)),
-    }
-
-    return x, fun, meta
-
-
-def _run_differential_evolution(
-    objective,
-    bounds_log: np.ndarray,
-    optimiser_cfg: Dict[str, Any],
-    seed: int | None,
-) -> Tuple[np.ndarray, float, Dict[str, Any]]:
-    """Run SciPy differential evolution in log-parameter space."""
-    bounds = [(float(lo), float(hi)) for lo, hi in bounds_log]
-
-    global_max_iter = _safe_int(optimiser_cfg.get("global_max_iter"), 120)
-    popsize = _safe_int(optimiser_cfg.get("popsize"), 8)
-    tol = _safe_float(optimiser_cfg.get("global_tol"), 1.0e-4)
-    workers = _safe_int(optimiser_cfg.get("workers"), 1)
-
-    updating = "deferred" if workers != 1 else "immediate"
-
-    res = differential_evolution(
-        objective,
-        bounds=bounds,
-        maxiter=global_max_iter,
-        popsize=popsize,
-        tol=tol,
-        polish=False,
-        seed=seed,
-        workers=workers,
-        updating=updating,
-    )
-
-    x = _clip_to_bounds(np.asarray(res.x, dtype=float), bounds_log)
-    fun = float(objective(x))
-
-    meta = {
-        "optimizer": "differential_evolution",
-        "success": bool(getattr(res, "success", False)),
-        "message": str(getattr(res, "message", "")),
-        "nfev": int(getattr(res, "nfev", -1)),
-        "nit": int(getattr(res, "nit", -1)),
-    }
-
-    return x, fun, meta
-
-
-def _run_dual_annealing(
-    objective,
-    bounds_log: np.ndarray,
-    optimiser_cfg: Dict[str, Any],
-    seed: int | None,
-) -> Tuple[np.ndarray, float, Dict[str, Any]]:
-    """Run SciPy dual annealing in log-parameter space."""
-    bounds = [(float(lo), float(hi)) for lo, hi in bounds_log]
-
-    global_max_iter = _safe_int(optimiser_cfg.get("global_max_iter"), 250)
-
-    res = dual_annealing(
-        objective,
-        bounds=bounds,
-        maxiter=global_max_iter,
-        seed=seed,
-        no_local_search=True,
-    )
-
-    x = _clip_to_bounds(np.asarray(res.x, dtype=float), bounds_log)
-    fun = float(objective(x))
-
-    meta = {
-        "optimizer": "dual_annealing",
-        "success": bool(getattr(res, "success", True)),
-        "message": str(getattr(res, "message", "")),
-        "nfev": int(getattr(res, "nfev", -1)),
-        "nit": int(getattr(res, "nit", -1)),
+        "status": int(getattr(res, "status", -999)),
     }
 
     return x, fun, meta
@@ -332,99 +314,14 @@ def _run_one_start(
     x0: np.ndarray,
     bounds_log: np.ndarray,
     optimiser_cfg: Dict[str, Any],
-    start_idx: int,
-    base_seed: int | None,
 ) -> Tuple[np.ndarray, float, Dict[str, Any]]:
-    """Dispatch one optimization run."""
-    method = str(optimiser_cfg.get("method", "hybrid_de_l_bfgs_b")).strip()
-    method_l = method.lower()
-
-    local_method = str(optimiser_cfg.get("local_method", "L-BFGS-B")).strip()
+    """Run one local optimization start."""
+    method = str(optimiser_cfg.get("method", "L-BFGS-B")).strip()
     max_iter = _safe_int(optimiser_cfg.get("max_iter"), 1000)
+
     tol_raw = optimiser_cfg.get("tol", None)
     tol = None if tol_raw is None else _safe_float(tol_raw, 1.0e-8)
 
-    seed = None if base_seed is None else int(base_seed) + int(start_idx)
-
-    if method_l in {"differential_evolution", "de"}:
-        return _run_differential_evolution(
-            objective=objective,
-            bounds_log=bounds_log,
-            optimiser_cfg=optimiser_cfg,
-            seed=seed,
-        )
-
-    if method_l in {"dual_annealing", "da"}:
-        return _run_dual_annealing(
-            objective=objective,
-            bounds_log=bounds_log,
-            optimiser_cfg=optimiser_cfg,
-            seed=seed,
-        )
-
-    if method_l in {
-        "hybrid_de_l_bfgs_b",
-        "hybrid_de",
-        "de_l_bfgs_b",
-        "de+lbfgsb",
-    }:
-        x_de, loss_de, meta_de = _run_differential_evolution(
-            objective=objective,
-            bounds_log=bounds_log,
-            optimiser_cfg=optimiser_cfg,
-            seed=seed,
-        )
-
-        polish = _as_bool(optimiser_cfg.get("polish"), True)
-        if not polish:
-            return x_de, loss_de, meta_de
-
-        x_loc, loss_loc, meta_loc = _run_local_minimize(
-            objective=objective,
-            x0=x_de,
-            bounds_log=bounds_log,
-            method=local_method,
-            max_iter=max_iter,
-            tol=tol,
-        )
-
-        meta_loc["optimizer"] = f"differential_evolution+{local_method}"
-        meta_loc["global_loss"] = float(loss_de)
-        meta_loc["global_nfev"] = int(meta_de.get("nfev", -1))
-        return x_loc, loss_loc, meta_loc
-
-    if method_l in {
-        "hybrid_da_l_bfgs_b",
-        "hybrid_da",
-        "da_l_bfgs_b",
-        "da+lbfgsb",
-    }:
-        x_da, loss_da, meta_da = _run_dual_annealing(
-            objective=objective,
-            bounds_log=bounds_log,
-            optimiser_cfg=optimiser_cfg,
-            seed=seed,
-        )
-
-        polish = _as_bool(optimiser_cfg.get("polish"), True)
-        if not polish:
-            return x_da, loss_da, meta_da
-
-        x_loc, loss_loc, meta_loc = _run_local_minimize(
-            objective=objective,
-            x0=x_da,
-            bounds_log=bounds_log,
-            method=local_method,
-            max_iter=max_iter,
-            tol=tol,
-        )
-
-        meta_loc["optimizer"] = f"dual_annealing+{local_method}"
-        meta_loc["global_loss"] = float(loss_da)
-        meta_loc["global_nfev"] = int(meta_da.get("nfev", -1))
-        return x_loc, loss_loc, meta_loc
-
-    # Default: bounded local scalar optimization.
     return _run_local_minimize(
         objective=objective,
         x0=x0,
@@ -432,6 +329,7 @@ def _run_one_start(
         method=method,
         max_iter=max_iter,
         tol=tol,
+        optimiser_cfg=optimiser_cfg,
     )
 
 
@@ -442,10 +340,7 @@ def run_fit(
     out_dir: str | Path,
     n_starts: int = 1,
 ) -> Dict[str, Path]:
-    """Run multistart scalar SciPy parameter fitting.
-
-    Parameters are optimized in log10 space and exported in linear space.
-    """
+    """Run multistart local SciPy parameter fitting."""
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
 
@@ -468,6 +363,10 @@ def run_fit(
         )
 
     param_names = list(param_defs.keys())
+
+    if len(param_names) == 0:
+        raise ValueError("No parameters were provided in the fit config.")
+
     bounds_log = np.array(
         [list(defn.bounds) for defn in param_defs.values()],
         dtype=float,
@@ -480,8 +379,11 @@ def run_fit(
     if bounds_log.ndim != 2 or bounds_log.shape[1] != 2:
         raise ValueError("Parameter bounds must be a two-column array.")
 
-    if len(param_names) == 0:
-        raise ValueError("No parameters were provided in the fit config.")
+    if np.any(~np.isfinite(bounds_log)):
+        raise ValueError("Parameter bounds contain non-finite values.")
+
+    if np.any(~np.isfinite(guess_log)):
+        raise ValueError("Parameter guesses contain non-finite values.")
 
     if np.any(bounds_log[:, 0] >= bounds_log[:, 1]):
         bad = [
@@ -511,10 +413,11 @@ def run_fit(
     )
 
     rng = np.random.default_rng(base_seed)
+    requested_starts = int(n_starts)
 
     results: List[Tuple[int, np.ndarray, float, Dict[str, Any]]] = []
 
-    for start_idx in range(int(n_starts)):
+    for start_idx in range(requested_starts):
         if start_idx == 0:
             x0 = guess_log.copy()
         else:
@@ -528,8 +431,6 @@ def run_fit(
                 x0=x0,
                 bounds_log=bounds_log,
                 optimiser_cfg=optimiser_cfg,
-                start_idx=start_idx,
-                base_seed=base_seed,
             )
         except Exception as exc:
             logger.exception(f"Optimization failed on start {start_idx}: {exc}")
@@ -548,7 +449,8 @@ def run_fit(
             f"Run {start_idx}: loss={final_loss:.6g}; "
             f"optimizer={meta.get('optimizer')}; "
             f"success={meta.get('success')}; "
-            f"nfev={meta.get('nfev')}"
+            f"nfev={meta.get('nfev')}; "
+            f"nit={meta.get('nit')}"
         )
 
     if not results:
@@ -604,9 +506,8 @@ def run_fit(
                 "success": meta.get("success", False),
                 "nfev": meta.get("nfev", -1),
                 "nit": meta.get("nit", -1),
+                "status": meta.get("status", -999),
                 "message": meta.get("message", ""),
-                "global_loss": meta.get("global_loss", np.nan),
-                "global_nfev": meta.get("global_nfev", np.nan),
             }
         )
 
@@ -620,7 +521,7 @@ def run_fit(
         "best_message": str(best_meta.get("message", "")),
         "n_parameters": len(param_names),
         "n_successful_runs": len(results),
-        "n_requested_starts": int(n_starts),
+        "n_requested_starts": requested_starts,
         "loss": scalar_loss,
         "f_scale": float(f_scale),
         "optimiser": optimiser_cfg,

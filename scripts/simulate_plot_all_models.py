@@ -159,6 +159,7 @@ def save_wide_plot(df: pd.DataFrame, model_name: str, out_dir: Path) -> Path:
 
     ax.set_title(f"{model_name}: forward simulation")
     ax.set_xlabel("Time")
+    # ax.set_xscale("log")
     ax.set_ylabel("Model value")
     ax.legend(fontsize=7, ncol=2)
     fig.tight_layout()

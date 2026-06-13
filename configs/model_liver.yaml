@@ -14,11 +14,11 @@ compartments:
 species:
   G6P_liver:
     compartment: hepatocyte_cytosol
-    initial_concentration: 1.0  # mM
+    initial_concentration: 1.0
     units: millimole_per_litre
   Glycogen_liver:
     compartment: hepatocyte_cytosol
-    initial_concentration: 100.0  # arbitrary units
+    initial_concentration: 100.0
     units: millimole_per_litre
   Pyr_liver:
     compartment: hepatocyte_cytosol
@@ -38,30 +38,27 @@ species:
     units: dimensionless
 parameters:
   Mito_capacity_ref: 1.0
-  k_glucose_uptake: 0.05
-  k_glycogen_synthesis: 0.02
-  k_glycogenolysis: 0.01
+  k_glucose_uptake: 0.1
+  k_glycogen_synthesis: 0.05
+  k_glycogenolysis: 0.05
   k_gng_pyr: 0.05
   k_gng_aa: 0.05
   k_glycolysis: 0.1
-  k_TCA_glucose: 0.1
-  k_gln_anaplerosis: 0.05
+  k_TCA_glucose: 0.05
+  k_gln_anaplerosis: 0.03
   k_lactate_export: 0.05
-  k_succ_export: 0.05
-  k_succ_clear: 0.01
-  k_mito_adapt: 0.01
-  mito_target: 1.0
+  k_succ_export: 0.2
+  k_succ_clear: 0.1
+  k_mito_adapt: 0.2
+  mito_target: 0.3
   mito_sucnr1_gain: 1.0
   mito_sucnr1_baseline: 1.0
-  # SUCNR1 activity scale multiplies succinate activation
-  K_sucnr1: 1.0
-  # Genotype multipliers (1 for WT, <1 for KO)
+  K_sucnr1: 0.03
   genotype_sucnr1: 1.0
   ocr_scale: 300.0
   ecar_scale: 100.0
   mito_ocr_scale: 500.0
 assignment_rules:
-  # Phenomenological SUCNR1 activity: genotype multiplier times succinate
   SUCNR1_activity: genotype_sucnr1 * Succ_extra / (K_sucnr1 + Succ_extra)
   OCR_proxy: ocr_scale * Mito_capacity
   ECAR_proxy: ecar_scale * Pyr_liver
