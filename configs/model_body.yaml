@@ -59,6 +59,7 @@ parameters:
   k_AA_liver_uptake: 0.1
   k_ketogenesis: 0.03
   k_ketone_clearance: 0.1
+  fasting_ketone_factor: 1.0
   k_succ_appearance: 0.005
   k_succ_clear: 0.2
 assignment_rules:

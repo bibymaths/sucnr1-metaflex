@@ -498,7 +498,7 @@ def _create_reactions(
         "ketogenesis_from_AA",
         ["AA_plasma"],
         ["Ketone_plasma"],
-        f"k_ketogenesis * AA_plasma * {plasma}",
+        f"k_ketogenesis * fasting_ketone_factor * AA_plasma * {plasma}",
     )
 
     add_reaction(

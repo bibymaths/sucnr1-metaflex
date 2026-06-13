@@ -9,12 +9,13 @@ import numpy as np
 import yaml
 
 CONDITION_COLUMNS = ("genotype", "condition", "group", "treatment")
-NEUTRAL_CONDITION_FACTORS = {
+NEUTRAL_CONDITION_FACTORS =  {
     "genotype_sucnr1": 1.0,
     "ligand_factor": 1.0,
     "antagonist_factor": 1.0,
     "ptt_hgp_factor": 1.0,
-}
+    "fasting_ketone_factor": 1.0,
+    }
 
 
 def load_protocol_config(path: str | Path = "configs/protocols.yaml") -> dict[str, Any]:

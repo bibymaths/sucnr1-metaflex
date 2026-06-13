@@ -22,7 +22,13 @@ body_protocols:
   fasting_glucose:
     initial_conditions: {G_abs: 0.0, Pyr_abs: 0.0, I_eff: 0.0}
   fasting_ketone:
-    initial_conditions: {G_abs: 0.0, Pyr_abs: 0.0, I_eff: 0.0}
+    initial_conditions:
+      G_abs: 0.0
+      Pyr_abs: 0.0
+      I_eff: 0.0
+      Ketone_plasma: {parameter: ketone_initial}
+    parameter_overrides:
+      fasting_ketone_factor: {parameter: fasting_ketone_factor}
 seahorse_protocols:
   default_ocr: {observable: OCR_proxy, shape: seahorse_ocr}
   default_ecar: {observable: ECAR_proxy, shape: seahorse_ecar}
