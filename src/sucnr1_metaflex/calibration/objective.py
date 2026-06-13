@@ -11,7 +11,7 @@ import pandas as pd
 from loguru import logger
 
 from sucnr1_metaflex.simulation.roadrunner_engine import load_model
-from .protocols import detect_condition_column, evaluate_shape, load_protocol_config, resolve_protocol, value_from_spec
+from .protocols import detect_condition_column, evaluate_shape, load_protocol_config, resolve_condition_factors, resolve_initial_conditions, resolve_protocol
 
 
 DEFAULT_PENALTY_VALUE = 1.0e11
@@ -254,14 +254,14 @@ def compute_residuals(
         for assay, cond_col, condition, observable, agg in tables:
             times = agg["time"].to_numpy(dtype=float)
             protocol = resolve_protocol(assay, protocols)
-            initial_conditions = {k: value_from_spec(v, params) for k, v in protocol.get("initial_conditions", {}).items()}
-            factors = {}
-            if cond_col is not None:
-                cf = protocol.get("condition_factors", {})
-                if cf:
-                    if condition not in cf:
-                        raise KeyError(f"No condition factors for assay={assay}, condition={condition}")
-                    factors = {k: value_from_spec(v, params) for k, v in cf[condition].items()}
+            initial_conditions = resolve_initial_conditions(protocol, params)
+            factors = (
+                resolve_condition_factors(
+                    protocol, condition if cond_col is not None else None, params
+                )
+                if protocol.get("condition_factors")
+                else {}
+            )
 
             sim = _simulate_fitted_to_times(
                 model_path=model_path,

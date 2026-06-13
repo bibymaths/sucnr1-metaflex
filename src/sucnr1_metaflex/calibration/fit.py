@@ -22,6 +22,7 @@ from scipy.optimize import Bounds, minimize
 
 from .parameters import load_fit_config
 from .objective import compute_residuals
+from .protocols import validate_protocol_parameters
 
 
 PENALTY_LOSS_THRESHOLD = 1.0e22
@@ -361,6 +362,11 @@ def run_fit(
             "The fit config is missing observable mappings for assays: "
             f"{missing_observables}"
         )
+
+    validate_protocol_parameters(
+        data["assay"].astype(str).unique(),
+        param_defs.keys(),
+    )
 
     param_names = list(param_defs.keys())
 

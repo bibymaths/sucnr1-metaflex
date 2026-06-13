@@ -36,22 +36,22 @@ seahorse_protocols:
     shape: seahorse_ecar
     condition_column: genotype
     condition_factors:
-      WT: {genotype_sucnr1: 1.0}
-      SUCNR1KO: {genotype_sucnr1: 0.0}
+      WT: {genotype_sucnr1: 1.0, ligand_factor: 1.0, antagonist_factor: 1.0}
+      SUCNR1KO: {genotype_sucnr1: 0.0, ligand_factor: 1.0, antagonist_factor: 1.0}
   OCR_siRNA:
     observable: OCR_proxy
     shape: seahorse_ocr
     condition_column: genotype
     condition_factors:
-      Scramble: {genotype_sucnr1: 1.0}
-      Sucnr1 siRNA: {genotype_sucnr1: {parameter: siRNA_sucnr1_factor}}
+      Scramble: {genotype_sucnr1: 1.0, ligand_factor: 1.0, antagonist_factor: 1.0}
+      Sucnr1 siRNA: {genotype_sucnr1: {parameter: siRNA_sucnr1_factor}, ligand_factor: 1.0, antagonist_factor: 1.0}
   ECAR_siRNA:
     observable: ECAR_proxy
     shape: seahorse_ecar
     condition_column: genotype
     condition_factors:
-      Scramble: {genotype_sucnr1: 1.0}
-      Sucnr1 siRNA: {genotype_sucnr1: {parameter: siRNA_sucnr1_factor}}
+      Scramble: {genotype_sucnr1: 1.0, ligand_factor: 1.0, antagonist_factor: 1.0}
+      Sucnr1 siRNA: {genotype_sucnr1: {parameter: siRNA_sucnr1_factor}, ligand_factor: 1.0, antagonist_factor: 1.0}
   OCR_antagonist_agonist:
     observable: OCR_proxy
     shape: seahorse_ocr
@@ -65,27 +65,27 @@ seahorse_protocols:
     shape: seahorse_ecar
     condition_column: genotype
     condition_factors:
-      Control: {genotype_sucnr1: 1.0}
-      NF-56-EJ40: {antagonist_factor: {parameter: antagonist_factor}}
-      NF-56-EJ40 + cESA: {ligand_factor: {parameter: cESA_ligand_factor}, antagonist_factor: {parameter: antagonist_rescue_factor}}
+      Control: {genotype_sucnr1: 1.0, ligand_factor: 1.0, antagonist_factor: 1.0}
+      NF-56-EJ40: {genotype_sucnr1: 1.0, ligand_factor: 1.0, antagonist_factor: {parameter: antagonist_factor}}
+      NF-56-EJ40 + cESA: {genotype_sucnr1: 1.0, ligand_factor: {parameter: cESA_ligand_factor}, antagonist_factor: {parameter: antagonist_rescue_factor}}
   OCR_liver_KO:
     observable: OCR_proxy
     shape: seahorse_ocr
     condition_column: genotype
     condition_factors:
-      Sucnr1fl/fl: {genotype_sucnr1: 1.0}
-      Hep-Sucnr1 KO: {genotype_sucnr1: 0.0}
+      Sucnr1fl/fl: {genotype_sucnr1: 1.0, ligand_factor: 1.0, antagonist_factor: 1.0}
+      Hep-Sucnr1 KO: {genotype_sucnr1: 0.0, ligand_factor: 1.0, antagonist_factor: 1.0}
   ECAR_liver_KO:
     observable: ECAR_proxy
     shape: seahorse_ecar
     condition_column: genotype
     condition_factors:
-      Sucnr1fl/fl: {genotype_sucnr1: 1.0}
-      Hep-Sucnr1 KO: {genotype_sucnr1: 0.0}
+      Sucnr1fl/fl: {genotype_sucnr1: 1.0, ligand_factor: 1.0, antagonist_factor: 1.0}
+      Hep-Sucnr1 KO: {genotype_sucnr1: 0.0, ligand_factor: 1.0, antagonist_factor: 1.0}
   mito_OCR:
     observable: mito_OCR_proxy
     shape: seahorse_ocr
     condition_column: genotype
     condition_factors:
-      Sucnr1fl/fl: {genotype_sucnr1: 1.0}
-      Hep-Sucnr1 KO: {genotype_sucnr1: 0.0}
+      Sucnr1fl/fl: {genotype_sucnr1: 1.0, ligand_factor: 1.0, antagonist_factor: 1.0}
+      Hep-Sucnr1 KO: {genotype_sucnr1: 0.0, ligand_factor: 1.0, antagonist_factor: 1.0}

@@ -12,7 +12,7 @@ from loguru import logger
 
 from sucnr1_metaflex.calibration.parameters import load_fit_config
 from sucnr1_metaflex.simulation.roadrunner_engine import load_model
-from sucnr1_metaflex.calibration.protocols import detect_condition_column, evaluate_shape, load_protocol_config, resolve_protocol, value_from_spec
+from sucnr1_metaflex.calibration.protocols import detect_condition_column, evaluate_shape, load_protocol_config, resolve_condition_factors, resolve_initial_conditions, resolve_protocol
 from sucnr1_metaflex.calibration.objective import _simulate_fitted_to_times as _simulate_protocol_to_times
 
 from .io import load_parameter_file, numeric_time_value_frame
@@ -211,14 +211,14 @@ def compute_fit_residual_table(
             if agg.empty:
                 continue
             times = agg["time"].to_numpy(dtype=float)
-            init = {k: value_from_spec(v, params) for k, v in protocol.get("initial_conditions", {}).items()}
-            factors = {}
-            if cond_col is not None:
-                cf = protocol.get("condition_factors", {})
-                if cf:
-                    if condition not in cf:
-                        raise KeyError(f"No condition factors for assay={assay}, condition={condition}")
-                    factors = {k: value_from_spec(v, params) for k, v in cf[condition].items()}
+            init = resolve_initial_conditions(protocol, params)
+            factors = (
+                resolve_condition_factors(
+                    protocol, condition if cond_col is not None else None, params
+                )
+                if protocol.get("condition_factors")
+                else {}
+            )
             sim = _simulate_protocol_to_times(model_path, params, times, [observable], initial_conditions=init, condition_factors=factors)
             pred = pd.to_numeric(sim[observable], errors="coerce").to_numpy(dtype=float)
             pred = pred * evaluate_shape(protocol.get("shape"), times, params)
