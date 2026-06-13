@@ -11,6 +11,7 @@ import pandas as pd
 from loguru import logger
 
 from sucnr1_metaflex.simulation.roadrunner_engine import load_model
+from .protocols import detect_condition_column, evaluate_shape, load_protocol_config, resolve_condition_factors, resolve_initial_conditions, resolve_protocol
 
 
 DEFAULT_PENALTY_VALUE = 1.0e11
@@ -44,36 +45,26 @@ def _numeric_time_value_frame(data: pd.DataFrame) -> pd.DataFrame:
 def _aggregated_assay_tables(
     data: pd.DataFrame,
     observables: Dict[str, str],
-) -> list[tuple[str, str, pd.DataFrame]]:
-    """Aggregate observations by assay and time."""
+) -> list[tuple[str, str | None, str, str, pd.DataFrame]]:
+    """Aggregate observations by assay, optional condition, and time."""
     df = _numeric_time_value_frame(data)
-
-    tables: list[tuple[str, str, pd.DataFrame]] = []
+    protocols = load_protocol_config()
+    tables: list[tuple[str, str | None, str, str, pd.DataFrame]] = []
 
     for assay, assay_df in df.groupby("assay", dropna=False):
         assay = str(assay)
-
         if assay not in observables:
-            continue
-
-        observable = str(observables[assay])
-
-        agg = (
-            assay_df.groupby("time")
-            .agg(
-                observed_mean=("value", "mean"),
-                observed_sd=("value", "std"),
-                n=("value", "count"),
-            )
-            .reset_index()
-            .sort_values("time")
-        )
-
-        if not agg.empty:
-            tables.append((assay, observable, agg))
-
+            raise KeyError(f"Fit config missing observable for assay '{assay}'")
+        protocol = resolve_protocol(assay, protocols)
+        observable = str(protocol.get("observable", observables[assay]))
+        cond_col = detect_condition_column(assay_df, protocol.get("condition_column"))
+        groups = [("__all__", assay_df)] if cond_col is None else assay_df.groupby(cond_col, dropna=False)
+        for condition, cdf in groups:
+            condition_label = "" if cond_col is None else str(condition)
+            agg = (cdf.groupby("time").agg(observed_mean=("value","mean"), observed_sd=("value","std"), n=("value","count")).reset_index().sort_values("time"))
+            if not agg.empty:
+                tables.append((assay, cond_col, condition_label, observable, agg))
     return tables
-
 
 def _expected_residual_length(
     data: pd.DataFrame,
@@ -81,7 +72,7 @@ def _expected_residual_length(
 ) -> int:
     """Return the fixed residual-vector length expected by optimizers."""
     return int(
-        sum(len(table) for _, _, table in _aggregated_assay_tables(data, observables))
+        sum(len(table) for _, _, _, _, table in _aggregated_assay_tables(data, observables))
     )
 
 
@@ -127,12 +118,9 @@ def _set_rr_parameters_strict(
     """Apply fitted parameters and fail if a requested parameter is absent."""
     _, global_params = _available_model_symbols(str(model_path))
 
-    missing = [name for name in params if name not in global_params]
-    if missing:
-        raise KeyError(f"Fitted parameters not present in model: {missing}")
-
     for name, value in params.items():
-        rr[name] = float(value)  # type: ignore[index]
+        if name in global_params:
+            rr[name] = float(value)  # type: ignore[index]
 
 
 def _simulate_fitted_to_times(
@@ -140,6 +128,8 @@ def _simulate_fitted_to_times(
     params: Dict[str, float],
     times: Iterable[float],
     selections: list[str],
+    initial_conditions: Dict[str, float] | None = None,
+    condition_factors: Dict[str, float] | None = None,
 ) -> pd.DataFrame:
     """Simulate a fitted model to requested times without losing parameters."""
     model_path = str(model_path)
@@ -155,6 +145,16 @@ def _simulate_fitted_to_times(
 
     rr = load_model(model_path)
     _set_rr_parameters_strict(rr, params, model_path)
+    _, global_params = _available_model_symbols(model_path)
+    all_symbols, _ = _available_model_symbols(model_path)
+    for name, value in (condition_factors or {}).items():
+        if name not in global_params:
+            raise KeyError(f"Condition factor {name} not present in model")
+        rr[name] = float(value)  # type: ignore[index]
+    for name, value in (initial_conditions or {}).items():
+        if name not in all_symbols:
+            raise KeyError(f"Protocol initial condition {name} not present in model")
+        rr[name] = float(value)  # type: ignore[index]
 
     times_arr = np.asarray(list(times), dtype=float)
     times_arr = times_arr[np.isfinite(times_arr)]
@@ -216,7 +216,7 @@ def compute_residuals(
     before being applied to the SBML model.
     """
     tables = _aggregated_assay_tables(data, observables)
-    n_expected = int(sum(len(table) for _, _, table in tables))
+    n_expected = int(sum(len(table) for _, _, _, _, table in tables))
 
     if n_expected <= 0:
         return _penalty_vector(1)
@@ -242,12 +242,8 @@ def compute_residuals(
 
     all_symbols, global_params = _available_model_symbols(str(model_path))
 
-    missing_params = sorted(set(params) - set(global_params))
-    if missing_params:
-        logger.error(f"Fit parameters absent from model: {missing_params}")
-        return _penalty_vector(n_expected)
-
-    missing_observables = sorted(set(observables.values()) - set(all_symbols))
+    protocols = load_protocol_config()
+    missing_observables = sorted({str(resolve_protocol(a, protocols).get("observable", o)) for a, o in observables.items()} - set(all_symbols))
     if missing_observables:
         logger.error(f"Observable symbols absent from model: {missing_observables}")
         return _penalty_vector(n_expected)
@@ -255,17 +251,29 @@ def compute_residuals(
     residual_parts: list[np.ndarray] = []
 
     try:
-        for assay, observable, agg in tables:
+        for assay, cond_col, condition, observable, agg in tables:
             times = agg["time"].to_numpy(dtype=float)
+            protocol = resolve_protocol(assay, protocols)
+            initial_conditions = resolve_initial_conditions(protocol, params)
+            factors = (
+                resolve_condition_factors(
+                    protocol, condition if cond_col is not None else None, params
+                )
+                if protocol.get("condition_factors")
+                else {}
+            )
 
             sim = _simulate_fitted_to_times(
                 model_path=model_path,
                 params=params,
                 times=times,
                 selections=[observable],
+                initial_conditions=initial_conditions,
+                condition_factors=factors,
             )
 
             pred = pd.to_numeric(sim[observable], errors="coerce").to_numpy(dtype=float)
+            pred = pred * evaluate_shape(protocol.get("shape"), times, params)
             obs = pd.to_numeric(agg["observed_mean"], errors="coerce").to_numpy(dtype=float)
 
             if pred.shape[0] != obs.shape[0]:

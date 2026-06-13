@@ -85,6 +85,16 @@ parameters:
     bounds:
     - -2
     - 2
+  genotype_sucnr1: {guess: 0.0, bounds: [-3, 1]}
+  ligand_factor: {guess: 0.0, bounds: [-3, 2]}
+  antagonist_factor: {guess: 0.0, bounds: [-3, 1]}
+  siRNA_sucnr1_factor: {guess: -0.7, bounds: [-3, 0]}
+  antagonist_rescue_factor: {guess: -0.3, bounds: [-2, 0.5]}
+  cESA_ligand_factor: {guess: 0.3, bounds: [-1, 2]}
+  ocr_peak_amp: {guess: 0.3, bounds: [-2, 2]}
+  ocr_drop_amp: {guess: 0.3, bounds: [-2, 2]}
+  ecar_peak_amp: {guess: 0.3, bounds: [-2, 2]}
+  ecar_drop_amp: {guess: 0.3, bounds: [-2, 2]}
 observables:
   OCR_WT_vs_global_KO: OCR_proxy
   OCR_antagonist_agonist: OCR_proxy
@@ -106,35 +116,14 @@ weights:
   ECAR_liver_KO: 1.0
   ECAR_siRNA: 1.0
 
-#optimiser:
-#  method: L-BFGS-B
-#  loss: soft_l1
-#  f_scale: 1.0
-#  max_iter: 3000
-#  maxfun: 3000
-#  ftol: 1.0e-9
-#  gtol: 1.0e-6
-#  maxls: 20
-#  n_starts: 10
-#  random_seed: 42
-
 optimiser:
-  method: SLSQP
+  method: L-BFGS-B
   loss: soft_l1
   f_scale: 1.0
   max_iter: 3000
+  maxfun: 3000
   ftol: 1.0e-9
+  gtol: 1.0e-6
+  maxls: 20
   n_starts: 10
   random_seed: 42
-
-#optimiser:
-#  method: trust-constr
-#  loss: soft_l1
-#  f_scale: 1.0
-#  max_iter: 1000
-#  gtol: 1.0e-6
-#  xtol: 1.0e-8
-#  barrier_tol: 1.0e-8
-#  verbose: 0
-#  n_starts: 5
-#  random_seed: 42

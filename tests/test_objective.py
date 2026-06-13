@@ -25,5 +25,5 @@ def test_objective_finite(tmp_path):
     # use guesses as log10 values
     log_params = np.array([fit_cfg.parameters[p].guess for p in param_names])
     assay_weights = fit_cfg.weights
-    res = compute_residuals(log_params, param_names, data, str(model_path), assay_weights)
+    res = compute_residuals(log_params, param_names, data, str(model_path), assay_weights, fit_cfg.observables)
     assert np.all(np.isfinite(res))

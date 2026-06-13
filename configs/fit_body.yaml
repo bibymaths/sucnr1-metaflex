@@ -4,8 +4,10 @@ parameters:
   glucose_mgdl_scale: {guess: 1.25, bounds: [0.5, 2.0]}
   k_export_glucose: {guess: -1.3, bounds: [-3, 1]}
   k_hgp_base: {guess: -2.0, bounds: [-4, 0]}
-  k_hgp_pyr: {guess: -1.5, bounds: [-4, 0]}
-  k_hgp_aa: {guess: -1.5, bounds: [-4, 0]}
+  V_hgp_pyr: {guess: -1.5, bounds: [-4, 1]}
+  K_pyr_hgp: {guess: 0.0, bounds: [-3, 2]}
+  V_hgp_aa: {guess: -2.0, bounds: [-4, 1]}
+  K_aa_hgp: {guess: 0.0, bounds: [-3, 2]}
   k_clear_base: {guess: -2.0, bounds: [-4, 0]}
   k_clear_ins: {guess: -1.0, bounds: [-4, 0]}
   k_pyr_uptake: {guess: -1.0, bounds: [-4, 0]}
@@ -15,7 +17,12 @@ parameters:
   k_ketone_clearance: {guess: -1.0, bounds: [-4, 0]}
   k_AA_release_fasting: {guess: -1.5, bounds: [-4, 0]}
   k_succ_appearance: {guess: -2.0, bounds: [-4, 0]}
-  k_I_decay: {guess: -1.0, bounds: [-4, 0]}
+  k_I_decay: {guess: 0.3, bounds: [-2, 1]}
+  gtt_glucose_bolus: {guess: 0.5, bounds: [-1, 2]}
+  ptt_pyruvate_bolus: {guess: 0.5, bounds: [-1, 2]}
+  itt_insulin_pulse: {guess: 0.0, bounds: [-2, 2]}
+  k_g_abs: {guess: 0.9, bounds: [-1, 2]}
+  k_pyr_abs: {guess: 0.6, bounds: [-1, 2]}
 
 observables:
   GTT: G_mgdl
@@ -38,32 +45,13 @@ weights:
   fasting_ketone: 0.5
 
 optimiser:
-  method: hybrid_de_l_bfgs_b
-  local_method: L-BFGS-B
+  method: L-BFGS-B
   loss: soft_l1
   f_scale: 1.0
-  global_max_iter: 80
-  popsize: 8
-  max_iter: 2000
-  polish: true
+  max_iter: 3000
+  maxfun: 3000
+  ftol: 1.0e-9
+  gtol: 1.0e-6
+  maxls: 20
   n_starts: 10
   random_seed: 42
-
-#optimiser:
-#  method: L-BFGS-B
-#  loss: soft_l1
-#  f_scale: 1.0
-#  max_iter: 2000
-#  n_starts: 10
-#  random_seed: 42
-#
-#optimiser:
-#  method: hybrid_da_l_bfgs_b
-#  local_method: L-BFGS-B
-#  loss: soft_l1
-#  f_scale: 1.0
-#  global_max_iter: 300
-#  max_iter: 2000
-#  polish: true
-#  n_starts: 5
-#  random_seed: 42

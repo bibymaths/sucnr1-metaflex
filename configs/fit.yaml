@@ -7,8 +7,10 @@
 parameters:
   k_export_glucose: {guess: -1.3, bounds: [-3, 1]}
   k_hgp_base: {guess: -2.0, bounds: [-4, 0]}
-  k_hgp_pyr: {guess: -1.5, bounds: [-4, 0]}
-  k_hgp_aa: {guess: -1.5, bounds: [-4, 0]}
+  V_hgp_pyr: {guess: -1.5, bounds: [-4, 1]}
+  K_pyr_hgp: {guess: 0.0, bounds: [-3, 2]}
+  V_hgp_aa: {guess: -2.0, bounds: [-4, 1]}
+  K_aa_hgp: {guess: 0.0, bounds: [-3, 2]}
   k_clear_base: {guess: -2.0, bounds: [-4, 0]}
   k_clear_ins: {guess: -1.0, bounds: [-4, 0]}
   k_pyr_uptake: {guess: -1.0, bounds: [-4, 0]}
@@ -16,6 +18,14 @@ parameters:
   k_AA_liver_uptake: {guess: -1.0, bounds: [-4, 0]}
   k_ketogenesis: {guess: -2.0, bounds: [-4, 0]}
   k_ketone_clearance: {guess: -1.0, bounds: [-4, 0]}
+  k_AA_release_fasting: {guess: -1.7, bounds: [-4, 0]}
+  k_succ_appearance: {guess: -2.3, bounds: [-4, 0]}
+  k_I_decay: {guess: 0.3, bounds: [-2, 1]}
+  gtt_glucose_bolus: {guess: 0.5, bounds: [-1, 2]}
+  ptt_pyruvate_bolus: {guess: 0.5, bounds: [-1, 2]}
+  itt_insulin_pulse: {guess: 0.0, bounds: [-2, 2]}
+  k_g_abs: {guess: 0.9, bounds: [-1, 2]}
+  k_pyr_abs: {guess: 0.6, bounds: [-1, 2]}
   k_glucose_uptake: {guess: -1.0, bounds: [-4, 0]}
   k_glycogen_synthesis: {guess: -1.5, bounds: [-4, 0]}
   k_glycogenolysis: {guess: -2.0, bounds: [-4, 0]}
@@ -34,6 +44,19 @@ weights:
   fasting_ketone: 0.5
 
 optimiser:
-  max_iter: 200
+  method: L-BFGS-B
+  loss: soft_l1
+  f_scale: 1.0
+  max_iter: 3000
+  maxfun: 3000
   n_starts: 10
   random_seed: 42
+observables:
+  GTT: G_mgdl
+  GTT_female: G_mgdl
+  ITT: G_mgdl
+  ITT_female: G_mgdl
+  PTT: G_mgdl
+  PTT_female: G_mgdl
+  fasting_glucose: G_mgdl
+  fasting_ketone: Ketone_plasma

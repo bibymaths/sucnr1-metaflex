@@ -1,0 +1,91 @@
+body_protocols:
+  GTT:
+    initial_conditions:
+      G_abs: {parameter: gtt_glucose_bolus}
+      Pyr_abs: 0.0
+      I_eff: 0.0
+  GTT_female: {inherit: GTT}
+  PTT:
+    initial_conditions:
+      G_abs: 0.0
+      Pyr_abs: {parameter: ptt_pyruvate_bolus}
+      I_eff: 0.0
+  PTT_female: {inherit: PTT}
+  ITT:
+    initial_conditions:
+      G_abs: 0.0
+      Pyr_abs: 0.0
+      I_eff: {parameter: itt_insulin_pulse}
+  ITT_female: {inherit: ITT}
+  fasting_glucose:
+    initial_conditions: {G_abs: 0.0, Pyr_abs: 0.0, I_eff: 0.0}
+  fasting_ketone:
+    initial_conditions: {G_abs: 0.0, Pyr_abs: 0.0, I_eff: 0.0}
+seahorse_protocols:
+  default_ocr: {observable: OCR_proxy, shape: seahorse_ocr}
+  default_ecar: {observable: ECAR_proxy, shape: seahorse_ecar}
+  OCR_WT_vs_global_KO:
+    observable: OCR_proxy
+    shape: seahorse_ocr
+    condition_column: genotype
+    condition_factors:
+      WT: {genotype_sucnr1: 1.0, ligand_factor: 1.0, antagonist_factor: 1.0}
+      SUCNR1KO: {genotype_sucnr1: 0.0, ligand_factor: 1.0, antagonist_factor: 1.0}
+  ECAR_WT_vs_global_KO:
+    observable: ECAR_proxy
+    shape: seahorse_ecar
+    condition_column: genotype
+    condition_factors:
+      WT: {genotype_sucnr1: 1.0, ligand_factor: 1.0, antagonist_factor: 1.0}
+      SUCNR1KO: {genotype_sucnr1: 0.0, ligand_factor: 1.0, antagonist_factor: 1.0}
+  OCR_siRNA:
+    observable: OCR_proxy
+    shape: seahorse_ocr
+    condition_column: genotype
+    condition_factors:
+      Scramble: {genotype_sucnr1: 1.0, ligand_factor: 1.0, antagonist_factor: 1.0}
+      Sucnr1 siRNA: {genotype_sucnr1: {parameter: siRNA_sucnr1_factor}, ligand_factor: 1.0, antagonist_factor: 1.0}
+  ECAR_siRNA:
+    observable: ECAR_proxy
+    shape: seahorse_ecar
+    condition_column: genotype
+    condition_factors:
+      Scramble: {genotype_sucnr1: 1.0, ligand_factor: 1.0, antagonist_factor: 1.0}
+      Sucnr1 siRNA: {genotype_sucnr1: {parameter: siRNA_sucnr1_factor}, ligand_factor: 1.0, antagonist_factor: 1.0}
+  OCR_antagonist_agonist:
+    observable: OCR_proxy
+    shape: seahorse_ocr
+    condition_column: genotype
+    condition_factors:
+      Control: {genotype_sucnr1: 1.0, ligand_factor: 1.0, antagonist_factor: 1.0}
+      NF-56-EJ40: {genotype_sucnr1: 1.0, ligand_factor: 1.0, antagonist_factor: {parameter: antagonist_factor}}
+      NF-56-EJ40 + cESA: {genotype_sucnr1: 1.0, ligand_factor: {parameter: cESA_ligand_factor}, antagonist_factor: {parameter: antagonist_rescue_factor}}
+  ECAR_antagonist_agonist:
+    observable: ECAR_proxy
+    shape: seahorse_ecar
+    condition_column: genotype
+    condition_factors:
+      Control: {genotype_sucnr1: 1.0, ligand_factor: 1.0, antagonist_factor: 1.0}
+      NF-56-EJ40: {genotype_sucnr1: 1.0, ligand_factor: 1.0, antagonist_factor: {parameter: antagonist_factor}}
+      NF-56-EJ40 + cESA: {genotype_sucnr1: 1.0, ligand_factor: {parameter: cESA_ligand_factor}, antagonist_factor: {parameter: antagonist_rescue_factor}}
+  OCR_liver_KO:
+    observable: OCR_proxy
+    shape: seahorse_ocr
+    condition_column: genotype
+    condition_factors:
+      Sucnr1fl/fl: {genotype_sucnr1: 1.0, ligand_factor: 1.0, antagonist_factor: 1.0}
+      Hep-Sucnr1 KO: {genotype_sucnr1: 0.0, ligand_factor: 1.0, antagonist_factor: 1.0}
+  ECAR_liver_KO:
+    observable: ECAR_proxy
+    shape: seahorse_ecar
+    condition_column: genotype
+    condition_factors:
+      Sucnr1fl/fl: {genotype_sucnr1: 1.0, ligand_factor: 1.0, antagonist_factor: 1.0}
+      Hep-Sucnr1 KO: {genotype_sucnr1: 0.0, ligand_factor: 1.0, antagonist_factor: 1.0}
+  mito_OCR:
+    observable: mito_OCR_proxy
+    shape: seahorse_ocr
+    condition_column: genotype
+    condition_factors:
+      Sucnr1fl/fl: {genotype_sucnr1: 1.0, ligand_factor: 1.0, antagonist_factor: 1.0}
+      Hep-Sucnr1 KO: {genotype_sucnr1: 0.0, ligand_factor: 1.0, antagonist_factor: 1.0}
