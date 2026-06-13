@@ -164,11 +164,11 @@ def _infer_parameter_units(pid: str) -> str:
     if name in concentration_exact:
         return "millimole_per_litre"
 
-    if name in {"k_hgp_base", "k_aa_release_fasting", "k_succ_appearance"}:
+    if name in {"k_hgp_base", "v_hgp_pyr", "v_hgp_aa", "k_aa_release_fasting", "k_succ_appearance"}:
         return "millimole_per_litre_per_hour"
 
-    if name in {"k_hgp_pyr", "k_hgp_aa"}:
-        return "per_hour"
+    if name in {"k_pyr_hgp", "k_aa_hgp"}:
+        return "millimole_per_litre"
 
     dimensionless_exact = {
         "glucose_mgdl_scale",
@@ -179,6 +179,8 @@ def _infer_parameter_units(pid: str) -> str:
         "sucnr1_activity",
         "mito_sucnr1_baseline",
         "mito_sucnr1_gain",
+        "ligand_factor",
+        "antagonist_factor",
     }
 
     if name in dimensionless_exact:
@@ -230,8 +232,8 @@ def _infer_parameter_units(pid: str) -> str:
     # Units: concentration / time.
     flux_exact = {
         "k_hgp_base",
-        "k_hgp_pyr",
-        "k_hgp_aa",
+        "V_hgp_pyr",
+        "V_hgp_aa",
         "k_aa_release_fasting",
         "k_succ_appearance",
         "k_gln_anaplerosis",
@@ -421,8 +423,22 @@ def _create_reactions(
         "source_G_plasma_hgp",
         [],
         ["G_plasma"],
-        f"(k_hgp_base + k_hgp_pyr * Pyr_plasma + k_hgp_aa * AA_plasma) * {plasma}",
+        f"(k_hgp_base + V_hgp_pyr * Pyr_plasma / (K_pyr_hgp + Pyr_plasma) + V_hgp_aa * AA_plasma / (K_aa_hgp + AA_plasma)) * {plasma}",
         modifiers=["Pyr_plasma", "AA_plasma"],
+    )
+
+    add_reaction(
+        "absorb_G_abs_to_G_plasma",
+        ["G_abs"],
+        ["G_plasma"],
+        f"k_g_abs * G_abs * {plasma}",
+    )
+
+    add_reaction(
+        "absorb_Pyr_abs_to_Pyr_plasma",
+        ["Pyr_abs"],
+        ["Pyr_plasma"],
+        f"k_pyr_abs * Pyr_abs * {plasma}",
     )
 
     # Glucose clearance, insulin-enhanced.

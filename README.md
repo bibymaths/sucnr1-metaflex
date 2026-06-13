@@ -427,20 +427,9 @@ find results/scenarios/combined_fit \
   | sort
 ```
 
-### 9. Current modeling limitation
+### 9. Protocol-driven transient fitting
 
-The SBML models and fit commands are valid, but the present calibration still treats GTT, ITT, PTT, KO, siRNA, agonist and antagonist assays mostly as baseline simulations unless protocol-specific perturbation logic has been added to the objective and plotting code.
-
-The next modeling improvement should be to apply assay-specific protocols during fitting and plotting:
-
-```text
-GTT -> glucose challenge / raised G_plasma
-ITT -> insulin action pulse / raised I_eff
-PTT -> pyruvate challenge / raised Pyr_plasma
-SUCNR1 KO or siRNA -> reduced genotype_sucnr1
-agonist -> increased Succ_extra or SUCNR1_activity
-antagonist -> reduced SUCNR1_activity
-```
+Calibration now applies assay-specific protocol inputs before each assay/condition simulation. GTT raises the `G_abs` absorption pool, PTT raises the `Pyr_abs` absorption pool, ITT raises `I_eff`, and fasting assays keep these protocol pools at zero. Seahorse KO, siRNA, antagonist, and agonist effects are applied as explicit condition factors and OCR/ECAR protocol shapes rather than autonomous ODE oscillations.
 
 --- 
 
@@ -450,3 +439,21 @@ This project is provided under the MIT license.  See the `LICENSE`
 file for details.
 
 ---
+## Protocol-driven calibration model
+
+The basal SUCNR1 models are intentionally compact and stable. Experimental transients are represented by assay protocols rather than by autonomous oscillatory ODE feedback. For body assays, GTT uses a decaying `G_abs` input pool, PTT uses a decaying `Pyr_abs` input pool, and ITT uses the existing decaying `I_eff` insulin-action pulse. Fasting protocols set all protocol input pools to zero.
+
+Seahorse OCR/ECAR peaks and drops are observation-layer protocol shapes (`seahorse_ocr` and `seahorse_ecar`) multiplied onto stable model observables with explicit genotype/treatment factors. This keeps OCR/ECAR fitting interpretable and avoids unconstrained succinate-driven oscillations.
+
+Typical commands:
+
+```bash
+sucnr1-build body --config configs/model_body.yaml --out results/models/body.xml
+sucnr1-build liver --config configs/model_liver.yaml --out results/models/liver.xml
+sucnr1-build combined --body-config configs/model_body.yaml --liver-config configs/model_liver.yaml --config configs/model_combined.yaml --out results/models/body_liver.xml
+python scripts/simulate_plot_all_models.py --no-fit-params --start 0 --end 2 --num 200 --out results/simulations/prefit_0_2h
+sucnr1-fit --data results/processed --model results/models/body.xml --config configs/fit_body.yaml --out results/runs/body_fit/fit --n-starts 3
+sucnr1-fit --data results/processed --model results/models/liver.xml --config configs/fit_liver.yaml --out results/runs/liver_fit/fit --n-starts 3
+sucnr1-plot fit --fit-dir results/runs/body_fit/fit --data results/processed --model results/models/body.xml --config configs/fit_body.yaml --out results/figures/body_fit
+sucnr1-plot fit --fit-dir results/runs/liver_fit/fit --data results/processed --model results/models/liver.xml --config configs/fit_liver.yaml --out results/figures/liver_fit
+```

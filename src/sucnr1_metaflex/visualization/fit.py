@@ -12,6 +12,8 @@ from loguru import logger
 
 from sucnr1_metaflex.calibration.parameters import load_fit_config
 from sucnr1_metaflex.simulation.roadrunner_engine import load_model
+from sucnr1_metaflex.calibration.protocols import detect_condition_column, evaluate_shape, load_protocol_config, resolve_protocol, value_from_spec
+from sucnr1_metaflex.calibration.objective import _simulate_fitted_to_times as _simulate_protocol_to_times
 
 from .io import load_parameter_file, numeric_time_value_frame
 from .style import apply_mpl_style, ensure_dir, safe_slug, save_figure
@@ -184,99 +186,47 @@ def compute_fit_residual_table(
     params_path: str | Path,
     config_path: str | Path,
 ) -> pd.DataFrame:
-    """Compute observed, predicted and residual values by assay/time."""
+    """Compute observed, predicted and residual values by assay/condition/time."""
     fit_cfg = load_fit_config(str(config_path))
-
-    data = _load_fit_plot_dataset(data_dir, fit_cfg.dataset)
-    data = numeric_time_value_frame(data)
+    data = numeric_time_value_frame(_load_fit_plot_dataset(data_dir, fit_cfg.dataset))
     data["assay"] = data["assay"].astype(str)
-
     observables = getattr(fit_cfg, "observables", {}) or {}
     params = load_parameter_file(params_path)
+    protocols = load_protocol_config()
 
     missing = sorted(set(data["assay"].unique()) - set(observables.keys()))
     if missing:
-        raise ValueError(
-            "Plot config is missing observable mappings for assays: "
-            f"{missing}"
-        )
+        raise ValueError(f"Plot config is missing observable mappings for assays: {missing}")
 
     records: list[dict[str, object]] = []
-
     for assay, assay_df in data.groupby("assay", dropna=False):
         assay = str(assay)
-        species_id = str(observables[assay])
-
-        agg = (
-            assay_df.groupby("time")
-            .agg(
-                observed_mean=("value", "mean"),
-                observed_sd=("value", "std"),
-                n=("value", "count"),
-            )
-            .reset_index()
-            .sort_values("time")
-        )
-
-        if agg.empty:
-            continue
-
-        times = agg["time"].to_numpy(dtype=float)
-
-        try:
-            sim = _simulate_fitted_to_times(
-                model_path=model_path,
-                params=params,
-                times=times,
-                selections=[species_id],
-            )
-        except Exception as exc:
-            logger.warning(
-                f"Skipping assay={assay}; simulation failed for {species_id}: {exc}"
-            )
-            continue
-
-        if species_id not in sim.columns:
-            logger.warning(
-                f"Skipping assay={assay}; missing simulated species {species_id}"
-            )
-            continue
-
-        pred = pd.to_numeric(sim[species_id], errors="coerce").to_numpy(dtype=float)
-
-        if pred.shape[0] != agg.shape[0]:
-            logger.warning(
-                f"Skipping assay={assay}; prediction/data length mismatch: "
-                f"pred={pred.shape[0]}, obs={agg.shape[0]}"
-            )
-            continue
-
-        for i, row in agg.reset_index(drop=True).iterrows():
-            observed = float(row["observed_mean"])
-            predicted = float(pred[i])
-
-            if not np.isfinite(observed) or not np.isfinite(predicted):
+        protocol = resolve_protocol(assay, protocols)
+        observable = str(protocol.get("observable", observables[assay]))
+        cond_col = detect_condition_column(assay_df, protocol.get("condition_column"))
+        groups = [("", assay_df)] if cond_col is None else assay_df.groupby(cond_col, dropna=False)
+        for condition, cdf in groups:
+            condition = "" if cond_col is None else str(condition)
+            agg = (cdf.groupby("time").agg(observed_mean=("value","mean"), observed_sd=("value","std"), n=("value","count")).reset_index().sort_values("time"))
+            if agg.empty:
                 continue
-
-            records.append(
-                {
-                    "assay": assay,
-                    "observable": species_id,
-                    "time": float(row["time"]),
-                    "observed_mean": observed,
-                    "observed_sd": (
-                        float(row["observed_sd"])
-                        if pd.notna(row["observed_sd"])
-                        else np.nan
-                    ),
-                    "n": int(row["n"]),
-                    "predicted": predicted,
-                    "residual": predicted - observed,
-                }
-            )
-
+            times = agg["time"].to_numpy(dtype=float)
+            init = {k: value_from_spec(v, params) for k, v in protocol.get("initial_conditions", {}).items()}
+            factors = {}
+            if cond_col is not None:
+                cf = protocol.get("condition_factors", {})
+                if cf:
+                    if condition not in cf:
+                        raise KeyError(f"No condition factors for assay={assay}, condition={condition}")
+                    factors = {k: value_from_spec(v, params) for k, v in cf[condition].items()}
+            sim = _simulate_protocol_to_times(model_path, params, times, [observable], initial_conditions=init, condition_factors=factors)
+            pred = pd.to_numeric(sim[observable], errors="coerce").to_numpy(dtype=float)
+            pred = pred * evaluate_shape(protocol.get("shape"), times, params)
+            for i, row in agg.reset_index(drop=True).iterrows():
+                observed = float(row["observed_mean"]); predicted = float(pred[i])
+                if np.isfinite(observed) and np.isfinite(predicted):
+                    records.append({"assay": assay, "condition_column": cond_col or "", "condition": condition, "observable": observable, "time": float(row["time"]), "observed_mean": observed, "observed_sd": float(row["observed_sd"]) if pd.notna(row["observed_sd"]) else np.nan, "n": int(row["n"]), "predicted": predicted, "residual": predicted - observed})
     return pd.DataFrame.from_records(records)
-
 
 def plot_model_fit(
     data_dir: str | Path,
@@ -314,25 +264,11 @@ def plot_model_fit(
 
         fig, ax = plt.subplots(figsize=(7.0, 4.5))
 
-        yerr = assay_df["observed_sd"].fillna(0.0).to_numpy(dtype=float)
-
-        ax.errorbar(
-            assay_df["time"].to_numpy(dtype=float),
-            assay_df["observed_mean"].to_numpy(dtype=float),
-            yerr=yerr,
-            marker="o",
-            linestyle="none",
-            capsize=2,
-            label="Observed mean",
-        )
-
-        ax.plot(
-            assay_df["time"].to_numpy(dtype=float),
-            assay_df["predicted"].to_numpy(dtype=float),
-            marker="x",
-            linewidth=1.5,
-            label=f"Model: {species_id}",
-        )
+        for condition, cdf in assay_df.groupby("condition", dropna=False):
+            label_suffix = f" ({condition})" if str(condition) else ""
+            yerr = cdf["observed_sd"].fillna(0.0).to_numpy(dtype=float)
+            ax.errorbar(cdf["time"].to_numpy(dtype=float), cdf["observed_mean"].to_numpy(dtype=float), yerr=yerr, marker="o", linestyle="none", capsize=2, label=f"Observed{label_suffix}")
+            ax.plot(cdf["time"].to_numpy(dtype=float), cdf["predicted"].to_numpy(dtype=float), marker="x", linewidth=1.5, label=f"Model{label_suffix}: {species_id}")
 
         ax.set_title(f"Fit: {assay}")
         ax.set_xlabel("Time")
