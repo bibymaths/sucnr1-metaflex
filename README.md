@@ -3,19 +3,19 @@
 This repository provides an end‐to‐end Python implementation of a
 phenomenological, SBML‐based ordinary differential equation (ODE)
 model of hepatic metabolic flexibility downstream of the succinate
-receptor 1 (SUCNR1).  The primary objective is to recapitulate
+receptor 1 (SUCNR1). The primary objective is to recapitulate
 glucose, insulin and pyruvate tolerance tests and
 fasting/refeeding dynamics observed in the accompanying study
 “SUCNR1 coordinates metabolic flux, mitochondrial function, and
-nutrient‐dependent adaptation in hepatocytes.  The model
+nutrient‐dependent adaptation in hepatocytes. The model
 couples a simple plasma compartment to a minimal hepatic module and
 allows calibration of rate constants to experimental time–series data.
 
-> **Disclaimer:** This model is intentionally compact.  It is not
+> **Disclaimer:** This model is intentionally compact. It is not
 > intended to replace genome–scale reconstructions or high‐fidelity
-> metabolic models.  Instead it provides a reproducible starting
+> metabolic models. Instead it provides a reproducible starting
 > point for exploring SUCNR1‐dependent phenomena, using the data
-> contained in the supplementary material of the paper.  Many
+> contained in the supplementary material of the paper. Many
 > kinetic and structural choices are phenomenological and should be
 > revisited as new data become available.
 
@@ -24,21 +24,26 @@ allows calibration of rate constants to experimental time–series data.
 ## Scientific aim
 
 Succinate is both an intermediate of the tricarboxylic acid (TCA)
-cycle and an extracellular signal sensed by the G protein–coupled
-receptor SUCNR1.  Marsal‑Beltran et al. show that hepatic succinate
+cycle and an extracellular signal sensed by the G protein–coupled
+receptor SUCNR1. Marsal‑Beltran et al. show that hepatic succinate
 and Sucnr1 expression rise after feeding and that hepatocyte‐specific
 knockout of Sucnr1 promotes a fasting‐like phenotype with enhanced
-gluconeogenesis and altered mitochondrial fluxes【9†L9-L11】.  The
+gluconeogenesis and altered mitochondrial fluxes【9†L9-L11】. The
 objective of this package is to translate these qualitative
 observations into a low dimensional ODE system whose parameters can
 be estimated from tolerance tests, fasting glucose/ketones and
-Seahorse flux assays.  Once calibrated, the model can be perturbed
-to explore in silico knockouts and pharmacological interventions.
+Seahorse flux assays. Once calibrated, the model can be perturbed
+to explore in silico knockouts and pharmacological interventions.
+
+Reference:
+
+Anna Marsal-Beltran et al. ,SUCNR1 coordinates metabolic flux, mitochondrial function, and nutrient-dependent adaptation
+in hepatocytes.Sci. Adv.12,eaec8873(2026).DOI:10.1126/sciadv.aec8873
 
 ## Installation
 
 Use [uv](https://github.com/astral-sh/uv) (or `pip`/`virtualenv`) to
-install the package and its dependencies.  Python 3.11 or higher is
+install the package and its dependencies. Python 3.11 or higher is
 required.
 
 ```bash
@@ -51,7 +56,8 @@ uv pip install .[dev]
 
 ## Step-wise workflow
 
-The commands below assume that the package is installed in the active environment and that the repository is being run from the project root.
+The commands below assume that the package is installed in the active environment and that the repository is being run
+from the project root.
 
 ```bash
 uv pip install -e ".[dev]"
@@ -429,21 +435,30 @@ find results/scenarios/combined_fit \
 
 ### 9. Protocol-driven transient fitting
 
-Calibration now applies assay-specific protocol inputs before each assay/condition simulation. GTT raises the `G_abs` absorption pool, PTT raises the `Pyr_abs` absorption pool, ITT raises `I_eff`, and fasting assays keep these protocol pools at zero. Seahorse KO, siRNA, antagonist, and agonist effects are applied as explicit condition factors and OCR/ECAR protocol shapes rather than autonomous ODE oscillations.
+Calibration now applies assay-specific protocol inputs before each assay/condition simulation. GTT raises the `G_abs`
+absorption pool, PTT raises the `Pyr_abs` absorption pool, ITT raises `I_eff`, and fasting assays keep these protocol
+pools at zero. Seahorse KO, siRNA, antagonist, and agonist effects are applied as explicit condition factors and
+OCR/ECAR protocol shapes rather than autonomous ODE oscillations.
 
 --- 
 
 ## License
 
-This project is provided under the MIT license.  See the `LICENSE`
+This project is provided under the MIT license. See the `LICENSE`
 file for details.
 
 ---
+
 ## Protocol-driven calibration model
 
-The basal SUCNR1 models are intentionally compact and stable. Experimental transients are represented by assay protocols rather than by autonomous oscillatory ODE feedback. For body assays, GTT uses a decaying `G_abs` input pool, PTT uses a decaying `Pyr_abs` input pool, and ITT uses the existing decaying `I_eff` insulin-action pulse. Fasting protocols set all protocol input pools to zero.
+The basal SUCNR1 models are intentionally compact and stable. Experimental transients are represented by assay protocols
+rather than by autonomous oscillatory ODE feedback. For body assays, GTT uses a decaying `G_abs` input pool, PTT uses a
+decaying `Pyr_abs` input pool, and ITT uses the existing decaying `I_eff` insulin-action pulse. Fasting protocols set
+all protocol input pools to zero.
 
-Seahorse OCR/ECAR peaks and drops are observation-layer protocol shapes (`seahorse_ocr` and `seahorse_ecar`) multiplied onto stable model observables with explicit genotype/treatment factors. This keeps OCR/ECAR fitting interpretable and avoids unconstrained succinate-driven oscillations.
+Seahorse OCR/ECAR peaks and drops are observation-layer protocol shapes (`seahorse_ocr` and `seahorse_ecar`) multiplied
+onto stable model observables with explicit genotype/treatment factors. This keeps OCR/ECAR fitting interpretable and
+avoids unconstrained succinate-driven oscillations.
 
 Typical commands:
 
