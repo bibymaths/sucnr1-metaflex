@@ -11,7 +11,7 @@ import pandas as pd
 from loguru import logger
 
 from sucnr1_metaflex.calibration.parameters import load_fit_config
-from sucnr1_metaflex.simulation.roadrunner_engine import load_model, simulate_to_times
+from sucnr1_metaflex.simulation.roadrunner_engine import load_model
 
 from .io import load_parameter_file, numeric_time_value_frame
 from .style import apply_mpl_style, ensure_dir, safe_slug, save_figure
@@ -54,6 +54,60 @@ def _set_rr_parameters(rr: object, params: Dict[str, float]) -> None:
         except Exception:
             continue
 
+def _simulate_fitted_to_times(
+    model_path: str | Path,
+    params: Dict[str, float],
+    times: np.ndarray,
+    selections: list[str],
+) -> pd.DataFrame:
+    """Simulate a fitted model to requested times without losing parameters.
+
+    This avoids using simulate_to_times here because that helper may reset the
+    RoadRunner instance internally, which can restore SBML default parameters.
+    """
+    rr = load_model(str(model_path))
+    _set_rr_parameters(rr, params)
+
+    times = np.asarray(times, dtype=float)
+    times = times[np.isfinite(times)]
+
+    if times.size == 0:
+        raise ValueError("No finite simulation times were provided.")
+
+    unique_times = np.unique(times)
+    t_min = float(np.min(unique_times))
+    t_max = float(np.max(unique_times))
+
+    ycols = [str(x) for x in selections]
+    rr.selections = ["time"] + ycols
+
+    # If there is only one time point, simulate a tiny interval and interpolate.
+    # This is safer than trying to read all assignment-rule outputs manually.
+    start = min(0.0, t_min)
+    end = t_max
+
+    if np.isclose(start, end):
+        end = start + 1.0e-9
+
+    n_points = max(200, 10 * len(unique_times))
+    n_points = min(n_points, 5000)
+
+    sim = rr.simulate(start, end, n_points)
+    sim_df = pd.DataFrame(sim, columns=["time"] + ycols)
+
+    out = pd.DataFrame({"time": unique_times})
+
+    sim_time = sim_df["time"].to_numpy(dtype=float)
+
+    for col in ycols:
+        values = pd.to_numeric(sim_df[col], errors="coerce").to_numpy(dtype=float)
+
+        if not np.all(np.isfinite(values)):
+            raise ValueError(f"Non-finite simulated values for {col}")
+
+        out[col] = np.interp(unique_times, sim_time, values)
+
+    return out
 
 def plot_ranked_multistart(
     fit_dir: str | Path,
@@ -169,11 +223,13 @@ def compute_fit_residual_table(
 
         times = agg["time"].to_numpy(dtype=float)
 
-        rr = load_model(str(model_path))
-        _set_rr_parameters(rr, params)
-
         try:
-            sim = simulate_to_times(rr, times, selections=[species_id])
+            sim = _simulate_fitted_to_times(
+                model_path=model_path,
+                params=params,
+                times=times,
+                selections=[species_id],
+            )
         except Exception as exc:
             logger.warning(
                 f"Skipping assay={assay}; simulation failed for {species_id}: {exc}"

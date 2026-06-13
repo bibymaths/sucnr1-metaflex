@@ -1,220 +1,308 @@
-"""Objective function for parameter estimation."""
+"""Calibration objective for SBML/RoadRunner model fitting."""
 
 from __future__ import annotations
 
-from typing import Dict, Sequence
+from functools import lru_cache
+from pathlib import Path
+from typing import Dict, Iterable
 
 import numpy as np
 import pandas as pd
 from loguru import logger
 
-from ..simulation.roadrunner_engine import load_model, simulate_to_times
+from sucnr1_metaflex.simulation.roadrunner_engine import load_model
 
 
-PENALTY_VALUE = 1.0e12
+DEFAULT_PENALTY_VALUE = 1.0e11
 
 
-def _safe_numeric_frame(data: pd.DataFrame) -> pd.DataFrame:
+def _numeric_time_value_frame(data: pd.DataFrame) -> pd.DataFrame:
+    """Return data with numeric time/value and valid assay labels."""
     df = data.copy()
+
+    if "assay" not in df.columns:
+        raise ValueError("Input data is missing required column: assay")
+
+    if "time" not in df.columns:
+        raise ValueError("Input data is missing required column: time")
+
+    if "value" not in df.columns:
+        raise ValueError("Input data is missing required column: value")
+
     df["assay"] = df["assay"].astype(str)
     df["time"] = pd.to_numeric(df["time"], errors="coerce")
     df["value"] = pd.to_numeric(df["value"], errors="coerce")
-    df = df[np.isfinite(df["time"]) & np.isfinite(df["value"])]
+
+    df = df[np.isfinite(df["time"]) & np.isfinite(df["value"])].copy()
+
+    if df.empty:
+        raise ValueError("No finite time/value rows remain for fitting.")
+
     return df
 
 
-def _assay_scale(values: pd.Series) -> float:
-    arr = pd.to_numeric(values, errors="coerce").to_numpy(dtype=float)
-    arr = arr[np.isfinite(arr)]
+def _aggregated_assay_tables(
+    data: pd.DataFrame,
+    observables: Dict[str, str],
+) -> list[tuple[str, str, pd.DataFrame]]:
+    """Aggregate observations by assay and time."""
+    df = _numeric_time_value_frame(data)
 
-    if arr.size == 0:
-        return 1.0
+    tables: list[tuple[str, str, pd.DataFrame]] = []
 
-    scale = float(np.nanstd(arr))
-
-    if not np.isfinite(scale) or scale <= 1.0e-12:
-        scale = float(np.nanmax(np.abs(arr)))
-
-    if not np.isfinite(scale) or scale <= 1.0e-12:
-        scale = 1.0
-
-    return scale
-
-
-def _available_model_symbols(rr: object) -> set[str]:
-    symbols: set[str] = {"time"}
-
-    objects = [rr, getattr(rr, "model", None)]
-
-    method_names = [
-        "getFloatingSpeciesIds",
-        "getBoundarySpeciesIds",
-        "getGlobalParameterIds",
-        "getCompartmentIds",
-        "getReactionIds",
-    ]
-
-    for obj in objects:
-        if obj is None:
-            continue
-
-        for method_name in method_names:
-            method = getattr(obj, method_name, None)
-
-            if not callable(method):
-                continue
-
-            try:
-                values = method()
-            except Exception:
-                continue
-
-            try:
-                symbols.update(str(x) for x in values)
-            except Exception:
-                continue
-
-    return symbols
-
-
-def _aggregated_assay_tables(data: pd.DataFrame) -> list[tuple[str, pd.DataFrame]]:
-    tables: list[tuple[str, pd.DataFrame]] = []
-
-    for assay, df_assay in data.groupby("assay", dropna=False):
+    for assay, assay_df in df.groupby("assay", dropna=False):
         assay = str(assay)
 
+        if assay not in observables:
+            continue
+
+        observable = str(observables[assay])
+
         agg = (
-            df_assay.groupby("time", as_index=False)["value"]
-            .agg(["mean", "std", "count"])
+            assay_df.groupby("time")
+            .agg(
+                observed_mean=("value", "mean"),
+                observed_sd=("value", "std"),
+                n=("value", "count"),
+            )
             .reset_index()
             .sort_values("time")
         )
 
         if not agg.empty:
-            tables.append((assay, agg))
+            tables.append((assay, observable, agg))
 
     return tables
 
 
-def _expected_residual_length(tables: list[tuple[str, pd.DataFrame]]) -> int:
-    return max(1, sum(len(table) for _, table in tables))
+def _expected_residual_length(
+    data: pd.DataFrame,
+    observables: Dict[str, str],
+) -> int:
+    """Return the fixed residual-vector length expected by optimizers."""
+    return int(
+        sum(len(table) for _, _, table in _aggregated_assay_tables(data, observables))
+    )
 
 
-def _penalty(length: int) -> np.ndarray:
-    return np.full(max(1, int(length)), PENALTY_VALUE, dtype=float)
+def _penalty_vector(length: int, value: float = DEFAULT_PENALTY_VALUE) -> np.ndarray:
+    """Return a fixed-length penalty residual vector."""
+    n = max(int(length), 1)
+    return np.full(n, float(value), dtype=float)
 
 
-def _set_parameters(rr: object, param_values: Dict[str, float]) -> None:
-    for pid, value in param_values.items():
-        try:
-            rr[pid] = float(value)  # type: ignore[index]
-        except Exception:
-            continue
+@lru_cache(maxsize=16)
+def _available_model_symbols(model_path: str) -> tuple[frozenset[str], frozenset[str]]:
+    """Return available model symbols and settable global parameters."""
+    rr = load_model(str(model_path))
+
+    all_symbols: set[str] = set()
+    global_params: set[str] = set()
+
+    for getter in [
+        "getFloatingSpeciesIds",
+        "getBoundarySpeciesIds",
+        "getGlobalParameterIds",
+        "getCompartmentIds",
+        "getReactionIds",
+    ]:
+        fn = getattr(rr.model, getter, None)
+        if callable(fn):
+            try:
+                values = {str(x) for x in fn()}
+                all_symbols.update(values)
+                if getter == "getGlobalParameterIds":
+                    global_params.update(values)
+            except Exception:
+                pass
+
+    return frozenset(all_symbols), frozenset(global_params)
+
+
+def _set_rr_parameters_strict(
+    rr: object,
+    params: Dict[str, float],
+    model_path: str,
+) -> None:
+    """Apply fitted parameters and fail if a requested parameter is absent."""
+    _, global_params = _available_model_symbols(str(model_path))
+
+    missing = [name for name in params if name not in global_params]
+    if missing:
+        raise KeyError(f"Fitted parameters not present in model: {missing}")
+
+    for name, value in params.items():
+        rr[name] = float(value)  # type: ignore[index]
+
+
+def _simulate_fitted_to_times(
+    model_path: str | Path,
+    params: Dict[str, float],
+    times: Iterable[float],
+    selections: list[str],
+) -> pd.DataFrame:
+    """Simulate a fitted model to requested times without losing parameters."""
+    model_path = str(model_path)
+
+    all_symbols, _ = _available_model_symbols(model_path)
+
+    missing_selections = [str(x) for x in selections if str(x) not in all_symbols]
+    if missing_selections:
+        raise KeyError(
+            f"Requested simulation selections are absent from model {model_path}: "
+            f"{missing_selections}"
+        )
+
+    rr = load_model(model_path)
+    _set_rr_parameters_strict(rr, params, model_path)
+
+    times_arr = np.asarray(list(times), dtype=float)
+    times_arr = times_arr[np.isfinite(times_arr)]
+
+    if times_arr.size == 0:
+        raise ValueError("No finite simulation times were provided.")
+
+    unique_times = np.unique(times_arr)
+    t_min = float(np.min(unique_times))
+    t_max = float(np.max(unique_times))
+
+    ycols = [str(x) for x in selections]
+    rr.selections = ["time"] + ycols
+
+    start = min(0.0, t_min)
+    end = t_max
+
+    if np.isclose(start, end):
+        end = start + 1.0e-9
+
+    n_points = max(200, 10 * len(unique_times))
+    n_points = min(n_points, 5000)
+
+    sim = rr.simulate(start, end, n_points)
+    sim_df = pd.DataFrame(sim, columns=["time"] + ycols)
+
+    sim_time = pd.to_numeric(sim_df["time"], errors="coerce").to_numpy(dtype=float)
+
+    if not np.all(np.isfinite(sim_time)):
+        raise ValueError("Simulation returned non-finite time values.")
+
+    out = pd.DataFrame({"time": unique_times})
+
+    for col in ycols:
+        values = pd.to_numeric(sim_df[col], errors="coerce").to_numpy(dtype=float)
+
+        if values.shape[0] != sim_time.shape[0]:
+            raise ValueError(f"Simulation returned malformed values for {col}")
+
+        if not np.all(np.isfinite(values)):
+            raise ValueError(f"Simulation returned non-finite values for {col}")
+
+        out[col] = np.interp(unique_times, sim_time, values)
+
+    return out
 
 
 def compute_residuals(
-    log_params: Sequence[float],
-    param_names: Sequence[str],
+    x_log: np.ndarray,
+    param_names: list[str],
     data: pd.DataFrame,
     model_path: str,
     assay_weights: Dict[str, float],
-    observables: Dict[str, str] | None = None,
+    observables: Dict[str, str],
 ) -> np.ndarray:
-    """Compute normalized residuals for one parameter vector.
+    """Compute fixed-length residual vector for log10 parameters.
 
-    The returned residual vector has constant length for all parameter
-    values. This is required by scipy.optimize.least_squares.
+    Parameters are optimized in log10 space and converted to linear space
+    before being applied to the SBML model.
     """
-    observables = observables or {}
+    tables = _aggregated_assay_tables(data, observables)
+    n_expected = int(sum(len(table) for _, _, table in tables))
 
-    df = _safe_numeric_frame(data)
+    if n_expected <= 0:
+        return _penalty_vector(1)
 
-    if df.empty:
-        logger.error("No finite data rows available for objective.")
-        return _penalty(1)
+    x_log = np.asarray(x_log, dtype=float).ravel()
 
-    assay_tables = _aggregated_assay_tables(df)
-    expected_len = _expected_residual_length(assay_tables)
+    if x_log.size != len(param_names):
+        return _penalty_vector(n_expected)
 
-    param_values = {
-        str(name): float(10.0 ** value)
-        for name, value in zip(param_names, log_params)
-    }
+    if not np.all(np.isfinite(x_log)):
+        return _penalty_vector(n_expected)
 
     try:
-        rr0 = load_model(model_path)
-        _set_parameters(rr0, param_values)
+        params = {
+            str(name): float(10.0 ** value)
+            for name, value in zip(param_names, x_log)
+        }
+    except Exception:
+        return _penalty_vector(n_expected)
+
+    if not all(np.isfinite(v) and v >= 0.0 for v in params.values()):
+        return _penalty_vector(n_expected)
+
+    all_symbols, global_params = _available_model_symbols(str(model_path))
+
+    missing_params = sorted(set(params) - set(global_params))
+    if missing_params:
+        logger.error(f"Fit parameters absent from model: {missing_params}")
+        return _penalty_vector(n_expected)
+
+    missing_observables = sorted(set(observables.values()) - set(all_symbols))
+    if missing_observables:
+        logger.error(f"Observable symbols absent from model: {missing_observables}")
+        return _penalty_vector(n_expected)
+
+    residual_parts: list[np.ndarray] = []
+
+    try:
+        for assay, observable, agg in tables:
+            times = agg["time"].to_numpy(dtype=float)
+
+            sim = _simulate_fitted_to_times(
+                model_path=model_path,
+                params=params,
+                times=times,
+                selections=[observable],
+            )
+
+            pred = pd.to_numeric(sim[observable], errors="coerce").to_numpy(dtype=float)
+            obs = pd.to_numeric(agg["observed_mean"], errors="coerce").to_numpy(dtype=float)
+
+            if pred.shape[0] != obs.shape[0]:
+                logger.error(
+                    f"Residual length mismatch for assay={assay}, "
+                    f"observable={observable}: pred={pred.shape[0]}, obs={obs.shape[0]}"
+                )
+                return _penalty_vector(n_expected)
+
+            if not np.all(np.isfinite(pred)) or not np.all(np.isfinite(obs)):
+                logger.error(
+                    f"Non-finite prediction or observation for assay={assay}, "
+                    f"observable={observable}"
+                )
+                return _penalty_vector(n_expected)
+
+            weight = float(assay_weights.get(str(assay), 1.0))
+            residual = weight * (pred - obs)
+
+            if not np.all(np.isfinite(residual)):
+                return _penalty_vector(n_expected)
+
+            residual_parts.append(residual.astype(float))
+
     except Exception as exc:
-        logger.error(f"Could not load model {model_path}: {exc}")
-        return _penalty(expected_len)
+        logger.debug(f"Residual computation failed: {exc}")
+        return _penalty_vector(n_expected)
 
-    available_symbols = _available_model_symbols(rr0)
+    if not residual_parts:
+        return _penalty_vector(n_expected)
 
-    residuals: list[float] = []
+    residuals = np.concatenate(residual_parts).astype(float)
 
-    for assay, agg in assay_tables:
-        species_id = observables.get(assay)
+    if residuals.shape[0] != n_expected:
+        return _penalty_vector(n_expected)
 
-        if species_id is None:
-            logger.error(
-                f"No observable mapping for assay '{assay}'. "
-                "Add it under the 'observables:' section of the fit YAML."
-            )
-            return _penalty(expected_len)
+    if not np.all(np.isfinite(residuals)):
+        return _penalty_vector(n_expected)
 
-        species_id = str(species_id)
-
-        if available_symbols and species_id not in available_symbols:
-            logger.error(
-                f"Observable '{species_id}' requested for assay '{assay}', "
-                f"but it is not present in model '{model_path}'. "
-                f"Available symbols include: {sorted(available_symbols)[:40]}"
-            )
-            return _penalty(expected_len)
-
-        times = agg["time"].to_numpy(dtype=float)
-        obs = agg["mean"].to_numpy(dtype=float)
-        scale = _assay_scale(agg["mean"])
-        weight = float(assay_weights.get(assay, 1.0))
-
-        try:
-            rr = load_model(model_path)
-            _set_parameters(rr, param_values)
-            sim = simulate_to_times(rr, times, selections=[species_id])
-        except Exception as exc:
-            logger.error(f"Simulation failed for assay={assay}, species={species_id}: {exc}")
-            return _penalty(expected_len)
-
-        if species_id not in sim.columns:
-            logger.error(f"Simulation output does not contain species '{species_id}'.")
-            return _penalty(expected_len)
-
-        pred = pd.to_numeric(sim[species_id], errors="coerce").to_numpy(dtype=float)
-
-        if pred.shape[0] != obs.shape[0]:
-            logger.error(
-                f"Prediction/data length mismatch for assay={assay}: "
-                f"pred={pred.shape[0]}, obs={obs.shape[0]}"
-            )
-            return _penalty(expected_len)
-
-        valid = np.isfinite(pred) & np.isfinite(obs)
-
-        if not np.any(valid):
-            return _penalty(expected_len)
-
-        assay_residuals = weight * (pred[valid] - obs[valid]) / scale
-        residuals.extend(assay_residuals.tolist())
-
-    if len(residuals) != expected_len:
-        logger.error(
-            f"Objective residual length changed: got {len(residuals)}, expected {expected_len}."
-        )
-        return _penalty(expected_len)
-
-    residual_array = np.asarray(residuals, dtype=float)
-
-    if not np.all(np.isfinite(residual_array)):
-        return _penalty(expected_len)
-
-    return residual_array
+    return residuals
