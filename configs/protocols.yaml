@@ -10,6 +10,8 @@ body_protocols:
       G_abs: 0.0
       Pyr_abs: {parameter: ptt_pyruvate_bolus}
       I_eff: 0.0
+    parameter_overrides:
+      ptt_hgp_factor: {parameter: ptt_hgp_factor}
   PTT_female: {inherit: PTT}
   ITT:
     initial_conditions:

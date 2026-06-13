@@ -39,12 +39,13 @@ species:
     initial_concentration: 0.0
     units: millimole_per_litre
 parameters:
+  ptt_hgp_factor: 1.0
   glucose_mgdl_scale: 18.0182
   I_eff_ref: 1.0
   k_export_glucose: 0.02
   k_hgp_base: 0.35
-  V_hgp_pyr: 0.03
-  K_pyr_hgp: 2.0
+  V_hgp_pyr: 0.05
+  K_pyr_hgp: 0.5
   V_hgp_aa: 0.02
   K_aa_hgp: 1.0
   k_clear_base: 0.07

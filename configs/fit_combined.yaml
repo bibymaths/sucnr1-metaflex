@@ -30,11 +30,6 @@ parameters:
     bounds:
     - -4
     - 0
-  V_hgp_pyr:
-    guess: -2.0
-    bounds:
-    - -4
-    - 0
   V_hgp_aa:
     guess: -2.0
     bounds:
@@ -160,21 +155,86 @@ parameters:
     bounds:
     - -2
     - 2
-  K_pyr_hgp: {guess: 0.0, bounds: [-3, 2]}
-  K_aa_hgp: {guess: 0.0, bounds: [-3, 2]}
-  k_g_abs: {guess: 0.9, bounds: [-1, 2]}
-  k_pyr_abs: {guess: 0.6, bounds: [-1, 2]}
-  gtt_glucose_bolus: {guess: 0.5, bounds: [-1, 2]}
-  ptt_pyruvate_bolus: {guess: 0.5, bounds: [-1, 2]}
-  itt_insulin_pulse: {guess: 0.0, bounds: [-2, 2]}
-  siRNA_sucnr1_factor: {guess: -0.7, bounds: [-3, 0]}
-  antagonist_factor: {guess: -1.0, bounds: [-3, 0]}
-  antagonist_rescue_factor: {guess: -0.3, bounds: [-2, 0.5]}
-  cESA_ligand_factor: {guess: 0.3, bounds: [-1, 2]}
-  ocr_peak_amp: {guess: 0.3, bounds: [-2, 2]}
-  ocr_drop_amp: {guess: 0.3, bounds: [-2, 2]}
-  ecar_peak_amp: {guess: 0.3, bounds: [-2, 2]}
-  ecar_drop_amp: {guess: 0.3, bounds: [-2, 2]}
+  K_pyr_hgp:
+    guess: -0.3
+    bounds:
+    - -1.0
+    - 0.7
+  K_aa_hgp:
+    guess: 0.0
+    bounds:
+    - -3
+    - 2
+  k_g_abs:
+    guess: 0.9
+    bounds:
+    - -1
+    - 2
+  k_pyr_abs:
+    guess: 1.0
+    bounds:
+    - -1
+    - 2.0
+  gtt_glucose_bolus:
+    guess: 0.5
+    bounds:
+    - -1
+    - 2
+  ptt_pyruvate_bolus:
+    guess: 0.5
+    bounds:
+    - -2
+    - 2.0
+  itt_insulin_pulse:
+    guess: 0.0
+    bounds:
+    - -2
+    - 2
+  siRNA_sucnr1_factor:
+    guess: -0.7
+    bounds:
+    - -3
+    - 0
+  antagonist_factor:
+    guess: -1.0
+    bounds:
+    - -3
+    - 0
+  antagonist_rescue_factor:
+    guess: -0.3
+    bounds:
+    - -2
+    - 0.5
+  cESA_ligand_factor:
+    guess: 0.3
+    bounds:
+    - -1
+    - 2
+  ocr_peak_amp:
+    guess: 0.3
+    bounds:
+    - -2
+    - 2
+  ocr_drop_amp:
+    guess: 0.3
+    bounds:
+    - -2
+    - 2
+  ecar_peak_amp:
+    guess: 0.3
+    bounds:
+    - -2
+    - 2
+  ecar_drop_amp:
+    guess: 0.3
+    bounds:
+    - -2
+    - 2
+  ptt_hgp_factor:
+    guess: 1.0
+    bounds:
+    - -1
+    - 2.5
 observables:
   GTT: G_mgdl
   GTT_female: G_mgdl
@@ -211,16 +271,14 @@ weights:
   ECAR_antagonist_agonist: 1.0
   ECAR_liver_KO: 1.0
   ECAR_siRNA: 1.0
-
-
 optimiser:
   method: L-BFGS-B
   loss: soft_l1
   f_scale: 1.0
   max_iter: 3000
   maxfun: 3000
-  ftol: 1.0e-9
-  gtol: 1.0e-6
+  ftol: 1.0e-09
+  gtol: 1.0e-06
   maxls: 20
   n_starts: 10
   random_seed: 42

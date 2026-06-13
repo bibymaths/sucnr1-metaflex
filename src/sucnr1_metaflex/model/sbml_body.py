@@ -423,7 +423,11 @@ def _create_reactions(
         "source_G_plasma_hgp",
         [],
         ["G_plasma"],
-        f"(k_hgp_base + V_hgp_pyr * Pyr_plasma / (K_pyr_hgp + Pyr_plasma) + V_hgp_aa * AA_plasma / (K_aa_hgp + AA_plasma)) * {plasma}",
+        (
+            f"(k_hgp_base "
+            f"+ V_hgp_pyr * ptt_hgp_factor * Pyr_plasma / (K_pyr_hgp + Pyr_plasma) "
+            f"+ V_hgp_aa * AA_plasma / (K_aa_hgp + AA_plasma)) * {plasma}"
+        ),
         modifiers=["Pyr_plasma", "AA_plasma"],
     )
 

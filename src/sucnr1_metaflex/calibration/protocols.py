@@ -13,6 +13,7 @@ NEUTRAL_CONDITION_FACTORS = {
     "genotype_sucnr1": 1.0,
     "ligand_factor": 1.0,
     "antagonist_factor": 1.0,
+    "ptt_hgp_factor": 1.0,
 }
 
 
