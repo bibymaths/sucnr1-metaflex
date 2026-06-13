@@ -1,0 +1,29 @@
+zip_path: "Beltran2026_Supp.zip"
+
+# Mapping of specific sheet names to descriptive assay labels.
+# These names are used during ingestion to assign the 'assay'
+# field in the tidy dataset.  Only a subset of sheets are
+# currently interpreted.  Additional sheets can be added as
+# needed.
+assay_map:
+  aec8873_data_s2.xlsx:
+    F2D: GTT
+    F2E: ITT
+    F2F: PTT
+    F2H: fasting_glucose
+    F2I: fasting_ketone
+  aec8873_data_s4.xlsx:
+    F4A: OCR_WT_vs_global_KO
+    F4B: ECAR_WT_vs_global_KO
+    F4C: OCR_liver_KO
+    F4D: ECAR_liver_KO
+    F4E: mito_OCR
+  aec8873_data_s9.xlsx:
+    SF4B: GTT_female
+    SF4C: ITT_female
+    SF4D: PTT_female
+  aec8873_data_s11.xlsx:
+    SF6B: OCR_siRNA
+    SF6C: ECAR_siRNA
+    SF6D: OCR_antagonist_agonist
+    SF6E: ECAR_antagonist_agonist

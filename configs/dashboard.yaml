@@ -1,0 +1,5 @@
+# Dashboard configuration.  Currently unused; reserved for
+# controlling page ordering, colour schemes and default selections
+# in future versions of the Dash application.
+title: SUCNR1 metabolic dashboard
+default_run: latest

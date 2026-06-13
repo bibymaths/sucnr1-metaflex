@@ -1,0 +1,51 @@
+id: body
+level: 3
+version: 2
+compartments:
+  plasma:
+    units: litre
+    size: 1.0
+species:
+  G_plasma:
+    compartment: plasma
+    initial_concentration: 5.0  # mM
+    units: millimole_per_litre
+  I_eff:
+    compartment: plasma
+    initial_concentration: 0.0  # dimensionless insulin action proxy
+    units: dimensionless
+  Pyr_plasma:
+    compartment: plasma
+    initial_concentration: 0.0
+    units: millimole_per_litre
+  AA_plasma:
+    compartment: plasma
+    initial_concentration: 0.0
+    units: millimole_per_litre
+  Ketone_plasma:
+    compartment: plasma
+    initial_concentration: 0.0
+    units: millimole_per_litre
+  Succ_plasma:
+    compartment: plasma
+    initial_concentration: 0.0
+    units: millimole_per_litre
+parameters:
+  k_export_glucose: 0.05
+  k_hgp_base: 0.01
+  k_hgp_pyr: 0.05
+  k_hgp_aa: 0.05
+  k_clear_base: 0.01
+  k_clear_ins: 0.05
+  k_pyr_uptake: 0.1
+  k_pyr_clear: 0.01
+  k_AA_release_fasting: 0.0
+  k_AA_liver_uptake: 0.05
+  k_ketogenesis: 0.01
+  k_ketone_clearance: 0.05
+  k_succ_appearance: 0.0
+  k_succ_clear: 0.01
+assignment_rules:
+  # Example: effective insulin activity decays exponentially
+  # I_eff' = u_insulin_itt(t) - k_I_decay * I_eff
+  k_I_decay: 0.1

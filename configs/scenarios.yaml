@@ -1,0 +1,26 @@
+# List of in silico scenarios.  Each scenario defines a name and a
+# set of parameter multipliers.  During simulation the baseline
+# parameters are multiplied by these factors.  Multipliers not
+# specified default to 1.0.
+scenarios:
+  - name: control
+    description: Wild type genotype
+    multipliers:
+      genotype_sucnr1: 1.0
+  - name: Hep-Sucnr1_KO
+    description: Hepatocyte-specific Sucnr1 knockout
+    multipliers:
+      genotype_sucnr1: 0.0
+  - name: partial_SUCNR1_inhibition_50pct
+    description: 50% SUCNR1 activity reduction
+    multipliers:
+      genotype_sucnr1: 0.5
+  - name: gluconeogenesis_inhibition
+    description: Reduce gluconeogenesis via pyruvate and amino acid pathways
+    multipliers:
+      k_gng_pyr: 0.1
+      k_gng_aa: 0.1
+  - name: succinate_clearance_increase
+    description: Increase succinate clearance
+    multipliers:
+      k_succ_clear: 10.0

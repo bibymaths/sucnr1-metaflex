@@ -1,0 +1,48 @@
+[build-system]
+requires = ["setuptools>=67", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sucnr1-metaflex"
+version = "0.1.0"
+description = "Phenomenological SBML-based model of SUCNR1-dependent hepatic metabolic flexibility"
+authors = [
+  {name = "OpenAI Assistant", email = "assistant@example.com"}
+]
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.11"
+dependencies = [
+    "numpy",
+    "pandas",
+    "scipy",
+    "pydantic",
+    "pyyaml",
+    "openpyxl",
+    "typer[all]",
+    "rich",
+    "loguru",
+    "matplotlib",
+    "plotly",
+    "dash",
+    "python-libsbml",
+    "sbmlutils",
+    "sbmlsim",
+    "libroadrunner",
+    "scikit-learn",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "ruff",
+]
+
+[project.scripts]
+sucnr1-data = "sucnr1_metaflex.cli:data_app"
+sucnr1-build = "sucnr1_metaflex.cli:build_app"
+sucnr1-fit = "sucnr1_metaflex.cli:fit_app"
+sucnr1-sim = "sucnr1_metaflex.cli:sim_app"
+sucnr1-scenarios = "sucnr1_metaflex.cli:scenario_app"
+sucnr1-report = "sucnr1_metaflex.cli:report_app"
+sucnr1-dashboard = "sucnr1_metaflex.cli:dashboard_app"

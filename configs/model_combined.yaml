@@ -1,0 +1,24 @@
+# This configuration describes the coupling between the body and
+# liver models.  At runtime the builder reads this file and
+# constructs a combined SBML document by importing the body and
+# liver modules and adding simple transport fluxes.  To keep the
+# example compact the coupling is limited to glucose and succinate
+# exchange.
+
+imports:
+  - body
+  - liver
+
+couplings:
+  # Plasma glucose enters the hepatocyte via uptake rate
+  - source: body::G_plasma
+    target: liver::G6P_liver
+    parameter: k_glucose_uptake
+  # Hepatic glucose export back to plasma
+  - source: liver::G6P_liver
+    target: body::G_plasma
+    parameter: k_export_glucose
+  # Succinate export from mitochondria into plasma
+  - source: liver::Succ_extra
+    target: body::Succ_plasma
+    parameter: k_succ_export
